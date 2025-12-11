@@ -1,1101 +1,606 @@
-let globalData = {
-    webSiteHomeUrl: '',
-    loadMorePage: 1,
-    totalPage: 0,
-    playMusicId: 0,
-    audio: new Audio(),
-    topMusicList: [],
-    playIndex: 0,
-    isTopMusic: false,
-    isDark: false
-};
-
-let lazyLoadInstance = new LazyLoad({
-    elements_selector: '[data-src]',
-    threshold: 0,
-    data_src: 'src'
-});
-
-function printCopyright() {
-    console.log('%cIcefox主题 By xiaopanglian v2.2.0 %chttps://0ru.cn', 'color: white;  background-color: #99cc99; padding: 10px;', 'color: white; background-color: #ff6666; padding: 10px;');
-}
-
-setInterval(() => {
-    //    loadTopMusicList();
-}, 30000);
-
-window.onload = async () => {
-    // 网站接口请求地址前缀
-    globalData.webSiteHomeUrl = document.querySelector('.webSiteHomeUrl')?.value;
-    if (document.querySelector('._currentPage')) {
-        globalData.loadMorePage = parseInt(document.querySelector('._currentPage').value);
-    }
-    if (document.querySelector('._totalPage')) {
-        globalData.totalPage = parseInt(document.querySelector('._totalPage').value);
-    }
-
-    // 歌曲播放完毕
-    //    globalData.audio.addEventListener('ended', function () {
-    //        refreshAudioUI();
-    //
-    //        // 如果是列表播放，则自动加载下一首歌
-    //        if (globalData.isTopMusic === true) {
-    //            // if (globalData.playIndex + 1 < globalData.topMusicList.length) {
-    //            //     globalData.playIndex = globalData.playIndex + 1;
-    //            // } else {
-    //            //     globalData.playIndex = 0;
-    //            // }
-    //
-    //            let src = globalData.topMusicList.shift();
-    //            loadAudio(src.url);
-    //            globalData.audio.play();
-    //            showFixedMusicPlayer(src.cover);
-    //        }
-    //    });
-
-    // 歌曲播放进度
-    //    globalData.audio.addEventListener('timeupdate', function () {
-    //        if (globalData.isTopMusic === true) {
-    //            // 进度
-    //            let currentTime = globalData.audio.currentTime;
-    //            let duration = globalData.audio.duration;
-    //            let jdtWidth = currentTime / duration * 5;//这里的5是w-20的宽度，单位是rem
-    //            $("#top-music-jdt").css('width', jdtWidth + "rem");
-    //        }
-    //    });
-
+$(function () {
     printCopyright();
-    loadQW();
-    clickQW();
-    clickSS();
-
-    // 点击打开互动悬浮框
-    clickHudong();
-
-    // 点击评论
-    clickComment();
-
-    // 点击点赞
-    clickLike();
-
-    // 点击emoji
-    clickEmoji();
-
-    // 加载顶部音乐
-    //    loadTopMusicList();
-
-    // 大图预览
-    let previewImages = document.querySelectorAll('.preview-image');
-    previewImages.forEach((element) => {
-        imagePreviewAddEventListener(element);
+    // 初始化Fancybox
+    Fancybox.bind("[data-fancybox]", {
+        Thumbs: {
+            autoStart: false // 不显示底部缩略图
+        },
+        Toolbar: {
+            display: {
+                left: ["infobar"],
+                middle: ["zoomIn", "zoomOut", "toggle1to1", "rotateCCW", "rotateCW", "flipX", "flipY"],
+                right: ["slideshow", "thumbs", "close"],
+            },
+        },
+        // 自定义配置
+        loop: true,
+        keyboard: {
+            Escape: "close",
+            Delete: "close",
+            Backspace: "close",
+            PageUp: "next",
+            PageDown: "prev",
+            ArrowUp: "next",
+            ArrowDown: "prev",
+            ArrowRight: "next",
+            ArrowLeft: "prev",
+        },
     });
 
-    // 下拉加载更多
-    // https://github.com/fa-ge/Scrollload/blob/master/README.md
-    new Scrollload({
-        container: document.querySelector('.main-container'),
-        content: document.querySelector('.article-container'),
-        // 底部加载中的html
-        loadingHtml: generateHtml('-- 加载中 --'),
-        // 底部没有更多数据的html
-        noMoreDataHtml: generateHtml('-- 已经到底了 --'),
-        // 底部出现异常的html
-        exceptionHtml: generateHtml('-- 出现异常 --'),
-        loadMore: async function (sl) {
+    // 初始化点赞功能
+    initLikes();
 
-            if (globalData.loadMorePage < globalData.totalPage) {
-                globalData.loadMorePage += 1;
+    // 初始化无限滚动功能
+    initInfiniteScroll();
 
-                await pjax(globalData.loadMorePage, '.article-container');
+    // 顶部容器滚动背景色变化功能
+    const $topContainer = $('.top-container');
+    const scrollThreshold = 264; // 滚动阈值
+    let lastScrollState = false; // 记录上一次的滚动状态
 
-                resetPlayerStyle();
+    // 切换图标函数 - 使用预加载的SVG内容
+    function toggleIcons(isScrolled) {
+        $('.tc-user, .tc-music, .tc-edit, .tc-setting').each(function () {
+            const $iconContainer = $(this);
+            const iconType = $iconContainer.data('icon');
+            const newIconType = isScrolled ? iconType + '-outline' : iconType;
 
-                // intersectionObserver();
+            // 从预加载的图标中获取内容
+            const $preloadedIcon = $(`.preloaded-icons [data-icon="${newIconType}"]`);
+            if ($preloadedIcon.length) {
+                $iconContainer.html($preloadedIcon.html());
+            }
+        });
+    }
+
+    // 监听滚动事件
+    $(window).scroll(function () {
+        const scrollTop = $(this).scrollTop();
+        const isScrolled = scrollTop > scrollThreshold;
+
+        // 只有当滚动状态发生变化时才执行操作
+        if (isScrolled !== lastScrollState) {
+            if (isScrolled) {
+                // 向下滚动超过阈值，添加背景色并切换图标
+                $topContainer.addClass('scrolled');
+                toggleIcons(true);
+            } else {
+                // 向上滚动小于阈值，移除背景色并恢复图标
+                $topContainer.removeClass('scrolled');
+                toggleIcons(false);
             }
 
-            if (globalData.loadMorePage >= globalData.totalPage) {
-                // 没有数据的时候需要调用noMoreData
+            // 更新上一次的滚动状态
+            lastScrollState = isScrolled;
+        }
+    });
+
+    // 页面加载时检查一次滚动位置
+    $(window).trigger('scroll');
+
+    // 全文按钮点击事件
+    $(document).on('click', '.show_all_btn', function() {
+        const $btn = $(this);
+        const cid = $btn.data('cid');
+        const $summary = $('.summary-' + cid);
+        const $fullContent = $('.full_content-' + cid);
+
+        // 显示全文内容，隐藏摘要
+        $summary.addClass('hidden');
+        $fullContent.removeClass('hidden');
+    });
+
+    // 收起按钮点击事件
+    $(document).on('click', '.hide_all_btn', function() {
+        const $btn = $(this);
+        const cid = $btn.data('cid');
+        const $summary = $('.summary-' + cid);
+        const $fullContent = $('.full_content-' + cid);
+
+        // 隐藏全文内容，显示摘要
+        $summary.removeClass('hidden');
+        $fullContent.addClass('hidden');
+    });
+
+    // 初始化回到顶部功能
+    initBackToTop();
+});
+
+// 无限滚动功能
+function initInfiniteScroll() {
+    // 检查是否有无限滚动容器
+    if (!$('.scrollload-container').length) {
+        return;
+    }
+
+    // 获取分页信息
+    const $pagination = $('.pagination');
+    const $currentPageEl = $('.current-page');
+    const $totalPagesEl = $('.total-pages');
+
+    if (!$pagination.length || !$currentPageEl.length || !$totalPagesEl.length) {
+        return;
+    }
+
+    // 判断页面类型（首页还是归档页）
+    const isArchivePage = $('.archive-header').length > 0 || window.location.pathname.includes('/search/') || window.location.pathname.includes('/category/') || window.location.pathname.includes('/tag/') || window.location.pathname.includes('/author/');
+
+    // 判断是否为作者页面（特殊处理，格式为 /author/{uid}/{page}/）
+    const isAuthorPage = window.location.pathname.includes('/author/');
+
+    // 从URL中获取当前页码，如果没有找到则默认为1
+    let currentPage = 1;
+    const currentPath = window.location.pathname;
+
+    if (isAuthorPage) {
+        // 作者页面：格式为 /author/{uid}/ 或 /author/{uid}/{page}/
+        const authorPageMatch = currentPath.match(/\/author\/\d+\/(\d+)\/?$/);
+        if (authorPageMatch) {
+            currentPage = parseInt(authorPageMatch[1]);
+        }
+        // 如果没有匹配到第二个数字，说明是第一页
+    } else if (isArchivePage) {
+        // 其他归档页面：匹配 /数字/ 格式 (如 /search/keyword/2/)
+        const archivePageMatch = currentPath.match(/\/(\d+)\/?$/);
+        if (archivePageMatch) {
+            currentPage = parseInt(archivePageMatch[1]);
+        }
+    } else {
+        // 首页：匹配 /page/数字/ 格式
+        const homePageMatch = currentPath.match(/\/page\/(\d+)\/?$/);
+        if (homePageMatch) {
+            currentPage = parseInt(homePageMatch[1]);
+        }
+    }
+    
+    // 如果URL解析失败，尝试从数据属性获取
+    if (currentPage === 1) {
+        const dataPage = $currentPageEl.data('page');
+        if (dataPage) {
+            currentPage = parseInt(dataPage);
+        }
+    }
+
+    const totalPages = parseInt($totalPagesEl.data('total'));
+
+    // 如果已经在最后一页，不需要初始化无限滚动
+    if (currentPage >= totalPages) {
+        return;
+    }
+
+    const postSelector = '.post-item';
+
+    // 初始化ScrollLoad
+    const scrollload = new Scrollload({
+        container: document.querySelector('.scrollload-container'),
+        content: document.querySelector('.scrollload-content'),
+        threshold: 100, // 提前100px开始加载
+        loadingHtml: `
+            <div class="scrollload-loading">
+                <div class="loading-spinner"></div>
+                <span>正在加载更多内容...</span>
+            </div>
+        `,
+        noMoreDataHtml: `
+            <div class="scrollload-nomore">
+                <span>没有更多内容了</span>
+            </div>
+        `,
+        exceptionHtml: `
+            <div class="scrollload-error">
+                <span>加载失败，请稍后重试</span>
+                <button class="retry-btn" onclick="location.reload()">重新加载</button>
+            </div>
+        `,
+        loadMore: function(sl) {
+            currentPage++;
+            // 检查是否超出总页数
+            if (currentPage > totalPages) {
                 sl.noMoreData();
                 return;
             }
-
-            sl.unLock();
-        },
-        pullRefresh: function (sl) {
-            sl.refreshComplete();
+            loadNextPage(currentPage, sl, postSelector, isArchivePage, isAuthorPage, totalPages);
         }
     });
+}
 
-    $(".go-back").on('click', function () {
-        window.location.href = "/";
-    });
+// 加载下一页内容
+function loadNextPage(page, scrollloadInstance, postSelector, isArchivePage, isAuthorPage, totalPages) {
+    // 双重检查：确保不超出总页数
+    if (page > totalPages) {
+        scrollloadInstance.noMoreData();
+        return;
+    }
+    // 构建下一页URL - 区分首页和归档页的分页格式
+    let nextPageUrl;
+    const currentPath = window.location.pathname;
+    const currentSearch = window.location.search;
 
-    $(window).scroll(function () {
-        let headerHeight = $("header").height();
-        let topFixedHeight = $("#top-fixed").height();
-        if ($(this).scrollTop() + topFixedHeight > headerHeight) {
-            // 顶部滑动下来
-            $('#top-fixed').addClass('bg-[#f0f0f0]');
-            $('#top-fixed').addClass('dark:bg-black/30');
-            $('#top-fixed').addClass('backdrop-blur-md');
-            $("#friend-light").addClass('hidden');
-            $("#friend-dark").removeClass('hidden');
-            $("#edit-light").addClass('hidden');
-            $("#edit-dark").removeClass('hidden');
-            $("#back-light").addClass('hidden');
-            $("#back-dark").removeClass('hidden');
-            $("#top-play-light").addClass('hidden');
-            $("#top-play-dark").removeClass('hidden');
-            $("#top-pause-light").addClass('hidden');
-            $("#top-pause-dark").removeClass('hidden');
-            // 右侧悬浮工具
-            $("#go-top").show();
+    if (isAuthorPage) {
+        // 作者页面：格式为 /author/{uid}/ 或 /author/{uid}/{page}/
+        // 需要保留 /author/{uid}/ 部分，只移除分页数字
+        let cleanPath = currentPath.replace(/\/author\/(\d+)\/\d+\/?$/, '/author/$1/');
+
+        // 如果没有匹配到分页数字（即当前是第一页），保持原路径
+        if (cleanPath === currentPath) {
+            cleanPath = currentPath.replace(/\/?$/, '/');
+        }
+
+        if (page === 1) {
+            nextPageUrl = cleanPath + currentSearch;
         } else {
-            // 顶部未滑动下来
-            $('#top-fixed').removeClass('bg-[#f0f0f0]');
-            $('#top-fixed').removeClass('dark:bg-black/30');
-            $('#top-fixed').removeClass('backdrop-blur-md');
-            $("#friend-light").removeClass('hidden');
-            $("#friend-dark").addClass('hidden');
-            $("#edit-light").removeClass('hidden');
-            $("#edit-dark").addClass('hidden');
-            $("#back-light").removeClass('hidden');
-            $("#back-dark").addClass('hidden');
-            $("#top-play-light").removeClass('hidden');
-            $("#top-play-dark").addClass('hidden');
-            $("#top-pause-light").removeClass('hidden');
-            $("#top-pause-dark").addClass('hidden');
-            // 右侧悬浮工具
-            $("#go-top").hide();
+            nextPageUrl = cleanPath + page + '/' + currentSearch;
         }
-    });
+    } else if (isArchivePage) {
+        // 其他归档页面：移除现有的数字分页路径 (如 /2/, /3/)
+        let cleanPath = currentPath.replace(/\/\d+\/?$/, '');
 
-    $("#music-modal").draggable({
-        containment: "body",
-        scroll: false
-    });
+        // 确保路径以 / 结尾，除非是根路径
+        if (cleanPath !== '' && !cleanPath.endsWith('/')) {
+            cleanPath += '/';
+        }
 
-    $("#fixed-music-close").click(function () {
-        $("#music-modal").hide();
-
-        globalData.playIndex = 0;
-        globalData.isTopMusic = false;
-
-        // 顶部音乐进度归0
-        $("#top-music-jdt").css('width', "0rem");
-
-        showTopMusicPlayUI();
-
-        closeAudio();
-    });
-
-    /**
-     * 暂停播放音乐
-     */
-    $("#fixed-music-pause").click(function () {
-        pauseAudioOne();
-
-
-        // 文章列表播放器按钮暂停
-        $("#music-play-" + globalData.playMusicId).removeClass("hidden");
-        $("#music-pause-" + globalData.playMusicId).addClass("hidden");
-
-        fixedMusicPlayerPauseUI();
-
-        // 顶部播放器按钮暂停
-        showTopMusicPlayUI();
-    });
-
-    $("#fixed-music-play").click(function () {
-        playAudioOne();
-
-        // 文章列表播放器按钮继续播放
-        $("#music-play-" + globalData.playMusicId).addClass("hidden");
-        $("#music-pause-" + globalData.playMusicId).removeClass("hidden");
-        fixedMusicPlayerPlayUI();
-        showTopMusicPauseUI();
-    });
-
-    /**
-     * 顶部音乐播放
-     */
-    $(".top-play").click(function () {
-        // 唤起悬浮音乐播放器，设置当前播放索引，开始播放
-
-        if (globalData.isTopMusic) { // 如果本来就是顶部音乐播放
-            globalData.audio.play();
+        if (page === 1) {
+            // 第一页不需要分页路径
+            nextPageUrl = cleanPath + currentSearch;
         } else {
-            // 原本不是顶部音乐播放，现在是顶部音乐播放
-
-            // 文章列表播放器按钮暂停
-            $("#music-play-" + globalData.playMusicId).removeClass("hidden");
-            $("#music-pause-" + globalData.playMusicId).addClass("hidden");
-
-            // 顶部音乐开始播放
-            globalData.playMusicId = 0;
-            globalData.playIndex = 0;
-            let src = globalData.topMusicList[globalData.playIndex];
-            loadAudio(src.url);
-            globalData.audio.play();
-            showFixedMusicPlayer(src.cover);
-
-            globalData.isTopMusic = true;
+            // 归档页分页格式：直接添加数字，如 /search/keyword/2/
+            nextPageUrl = cleanPath + page + '/' + currentSearch;
+        }
+    } else {
+        // 首页：移除现有的 /page/数字 分页路径
+        let cleanPath = currentPath.replace(/\/page\/\d+\/?$/, '');
+        
+        // 确保路径以 / 结尾，除非是根路径
+        if (cleanPath !== '' && !cleanPath.endsWith('/')) {
+            cleanPath += '/';
         }
 
-        showTopMusicPauseUI();
-    });
+        if (page === 1) {
+            // 第一页不需要分页路径
+            nextPageUrl = cleanPath + currentSearch;
+        } else {
+            // 首页分页格式：/page/2/
+            nextPageUrl = cleanPath + 'page/' + page + '/' + currentSearch;
+        }
+    }
 
-    /**
-     * 顶部音乐暂停
-     */
-    $(".top-pause").click(function () {
-        globalData.audio.pause();
+    $.ajax({
+        url: nextPageUrl,
+        type: 'GET',
+        dataType: 'html',
+        success: function(response) {
+            try {
+                // 解析返回的HTML
+                const $response = $(response);
+                const $newPosts = $response.find('.scrollload-content ' + postSelector);
 
-        showTopMusicPlayUI();
-    });
+                if ($newPosts.length === 0) {
+                    // 没有更多内容
+                    scrollloadInstance.noMoreData();
+                    return;
+                }
+                
+                // 将新内容添加到现有列表中
+                const $content = $('.scrollload-content');
+                $newPosts.each(function() {
+                    // 重新绑定Alpine.js数据
+                    const $newItem = $(this).appendTo($content);
+                    // 触发Alpine.js初始化
+                    if (window.Alpine) {
+                        window.Alpine.initTree($newItem[0]);
+                    }
 
-    lazyLoadInstance.update();
+                    // 初始化新文章的点赞数据
+                    const $likeContainer = $newItem.find('.pcc-like-list');
+                    if ($likeContainer.length) {
+                        const cid = $likeContainer.data('cid');
+                        if (cid) {
+                            loadLikeData(cid, $likeContainer);
+                        }
+                    }
 
-    resetPlayerStyle();
-
-    // intersectionObserver();
-
-    initDarkMode();
-
-    $(".darkMode").click(function () {
-        toggleDarkMode();
-    });
-};
-
-var videoTimeOut;
-function intersectionObserver() {
-    let observAutoPlayVideo = $("#observAutoPlayVideo").val();
-    if (observAutoPlayVideo === 'yes') {
-        videoTimeOut = null;
-        videoTimeOut = setTimeout(() => {
-            $("video").each((index, video) => {
-                // 创建 Intersection Observer 实例
-                const observer = new IntersectionObserver(
-                    (entries) => {
-                        entries.forEach((entry) => {
-                            if (entry.isIntersecting) {
-                                video.play();
-                            } else {
-                                video.pause();
+                    // 初始化新加载的音乐卡片
+                    const $musicPlayers = $newItem.find('[data-music-player]');
+                    if ($musicPlayers.length && window.IcefoxMusicManager) {
+                        $musicPlayers.each(function() {
+                            // 检查是否已经初始化过
+                            if (!this.dataset.musicPlayerInitialized) {
+                                const player = new MusicPlayer(this);
+                                window.IcefoxMusicManager.register(player);
                             }
                         });
-                    },
-                    {
-                        root: null,
-                        rootMargin: '0px',
-                        threshold: 0.5, // 当视频元素至少有 50% 进入视窗时触发
                     }
-                );
-
-                // 开始观察视频元素
-                observer.observe(video);
-            });
-        }, 1000);
-    }
-}
-
-// 暂停所有页面上的 video 播放
-function pauseAllVideos() {
-    $('video').each(function () {
-        this.pause();
-    });
-}
-
-function resetPlayerStyle() {
-    const players = Array.from(document.querySelectorAll('.js-player')).map((p) =>
-        new Plyr(p, {
-            controls: ['play-large', 'play', 'mute', 'captions', 'fullscreen'],
-            muted: true
-        })
-    );
-    setTimeout(() => {
-        $(".js-player").each((index, item) => {
-            var src = $(item).data('src');
-            if (isM3U8Url(src)) {
-                if (Hls.isSupported()) {
-                    var hls = new Hls();
-                    hls.loadSource(src);
-                    hls.attachMedia(item);
-                }
-            }
-        });
-    }, 1000);
-
-}
-function isM3U8Url(url) {
-    try {
-        const parsedUrl = new URL(url);
-        return parsedUrl.pathname.endsWith('.m3u8');
-    } catch (error) {
-        return false;
-    }
-}
-/**
- * 顶部音乐显示播放按钮
- */
-function showTopMusicPlayUI() {
-    $("#top-play").show();
-    $("#top-pause").hide();
-}
-
-/**
- * 顶部音乐显示暂停按钮
- */
-function showTopMusicPauseUI() {
-    $("#top-play").hide();
-    $("#top-pause").show();
-}
-
-/**
- * 加载顶部音乐
- */
-//function loadTopMusicList() {
-//    // 默认使用https://api.vvhan.com/api/wyMusic/%E7%83%AD%E6%AD%8C%E6%A6%9C?type=json源
-//    // 获取音乐链接
-//    globalData.topMusicList = []
-//    $.get('/api/music', function (res) {
-//        console.log(res);
-////        let mp3Url = `https://api.injahow.cn/meting/?type=url&id=${res.data.info.id}`;
-////        globalData.topMusicList.push({ url: mp3Url, cover: res.data.info.pic_url })
-//        //loadAudio(mp3Url)
-//    })
-//}
-
-/**
- * 加载文章是否需要全文按钮
- */
-function loadQW() {
-    $.each($(".article-content"), function (index, element) {
-        if (element.scrollHeight > element.offsetHeight) {
-            let cid = $(element).data('cid');
-
-            //添加全文按钮
-            $(".qw-" + cid).removeClass('hidden');
-        }
-    })
-}
-
-// 点击全文按钮
-function clickQW() {
-    $(".qw").off('click');
-    $(".qw").on('click', function (e) {
-        $(e.target).addClass('hidden');
-
-        let cid = $(e.target).data('cid');
-
-        $(".content-" + cid).removeClass("line-clamp-4");
-        $(".ss-" + cid).removeClass('hidden');
-    });
-}
-
-// 点击收起按钮
-function clickSS() {
-    $(".ss").off('click');
-    $(".ss").on('click', function (e) {
-        $(e.target).addClass('hidden');
-
-        let cid = $(e.target).data('cid');
-
-        $(".content-" + cid).addClass("line-clamp-4");
-        $(".qw-" + cid).removeClass('hidden');
-    });
-}
-
-// 全局窗口点击事件
-let hudongBox = document.querySelector('.hudong');
-window.addEventListener('click', (event) => {
-    // 判断点击的是否是悬浮框，不是就隐藏
-    if (event.target.classList.contains('hudong')) {
-        return;
-    }
-    if (event.target.classList.contains('comment-to')) {
-        return;
-    }
-    if (event.target.classList.contains('face')) {
-        return;
-    }
-    if (event.target.classList.contains('face-item')) {
-        return;
-    }
-    if (event.target.classList.contains('face-container')) {
-        return;
-    }
-    if ($(event.target).prop('tagName') === 'INPUT') {
-        return;
-    }
-    if ($(event.target).prop('tagName') === 'BUTTON') {
-        return;
-    }
-    // 隐藏所有互动悬浮框
-    hiddenHudongModal();
-    // removeAllCommentForm();
-});
-
-/**
- * 点击emoji
- */
-function clickEmoji() {
-    $(".face-item").off('click');
-    $(".face-item").on('click', function (e) {
-        let cid = $(e.target).data('cid');
-        var input = $('input[data-cid=' + cid + '].input-text');
-
-        var textToAppend = $(e.target).text(); // 要追加的文本  
-        var currentVal = input.val();
-        input.val(currentVal + textToAppend);
-    });
-}
-
-/**
- * 点击emoji表情显示/隐藏emoji
- */
-function clickEmojiFace() {
-    $(".face").off('click');
-    $(".face").on('click', function (e) {
-        let cid = $(e.target).data('cid');
-        var faceContainer = $('.face-container[data-cid=' + cid + ']');
-
-        if ($(faceContainer).hasClass('hidden')) {
-            $(faceContainer).removeClass('hidden');
-        } else {
-            $(faceContainer).addClass('hidden');
-        }
-    });
-}
-
-/**
- * 点击互动
- */
-function clickHudong() {
-    $(".hudong").off('click');
-    $(".hudong").on('click', function (e) {
-        let hudongElement = e.target;
-
-        hiddenHudongModal();
-
-        let modal = $(hudongElement).next();
-        modal.removeClass('hidden');
-    });
-}
-
-/**
- * 点击评论
- */
-function clickComment() {
-    $(".comment-to").off('click');
-    $(".comment-to").on('click', function (e) {
-
-        let cid = $(e.target).data('cid');
-        let coid = $(e.target).data('coid');
-
-        // 找到已有的评论框
-        var existsCommentFormCoid = $(".comment-form").data("coid");
-        var existsCommentFormCid = $(".comment-form").data("cid");
-        if (existsCommentFormCoid === 'undefined') existsCommentFormCoid = undefined;
-        if (existsCommentFormCid === 'undefined') existsCommentFormCid = undefined;
-
-        var hasCommentForm = $(".comment-form").length > 0;
-
-        removeAllCommentForm();
-
-        if (hasCommentForm && existsCommentFormCoid === coid && existsCommentFormCid === cid) {
-            return;
-        }
-
-        let name = $(e.target).data('name');
-
-        if (coid == undefined) {
-            // 如果没有coid，那么就在最下方显示评论框
-            // document.querySelector('.comment-ul-cid-' + cid).insertAdjacentHTML('beforeend', getCommentFormHtml(cid));
-            $('.comment-ul-cid-' + cid).prepend(getCommentFormHtml(cid));
-        } else {
-            //有coid，在对应评论处显示评论框
-            document.querySelector('.comment-li-coid-' + coid).insertAdjacentHTML('afterend', getCommentFormHtml(cid, coid, name));
-        }
-
-        clickEmoji();
-        clickEmojiFace();
-
-        // 点击评论回复按钮
-        $(".btn-comment").off('click');
-        $(".btn-comment").on('click', function (e) {
-            let cid = $(e.target).data('cid');
-            let coid = $(e.target).data('coid');
-
-            let requiredMail = $("#commentsRequireMail").val();
-            let requiredURL = $("#commentsRequireURL").val();
-
-            let author = document.querySelector('.input-author').value;
-            let url = document.querySelector('.input-url').value;
-            let mail = document.querySelector('.input-mail').value;
-            let text = document.querySelector('.input-text').value;
-            let param = {
-                cid: cid,
-                parent: coid,
-                author: author,
-                mail: mail,
-                url: url,
-                text: text,
-            };
-            if (param.author === '') {
-                alert('昵称不能为空');
-                return;
-            }
-            if (requiredMail == 1 && param.mail === '') {
-                alert('邮件不能为空');
-                return;
-            }
-            if (requiredURL == 1 && param.url === '') {
-                alert('网址不能为空');
-                return;
-            }
-            if (param.text === '') {
-                alert('评论内容不能为空');
-                return;
-            }
-
-            // 记录信息到localStorage
-            window.localStorage.setItem('author', author);
-            window.localStorage.setItem('mail', mail);
-            window.localStorage.setItem('url', url);
-
-            axios.post(globalData.webSiteHomeUrl + 'api/comment', param,
-                { headers: { 'content-type': 'application/x-www-form-urlencoded' } })
-                .then(function (response) {
-                    if (response.data.status == 1) {
-                        removeAllCommentForm();
-
-                        let waiting = '';
-                        // 把评论显示在对应位置
-                        if (response.data.comment.status == 'waiting') {
-                            // 显示待审核
-                            waiting = '<span class="comment-waiting">待审核</span>';
-                        }
-
-                        if (param.parent > 0) {
-                            //有coid，在对应评论处显示评论框
-                            document.querySelector('.comment-li-coid-' + param.parent).insertAdjacentHTML('afterend', `
-                                <li class="pos-rlt comment-li-coid-${response.data.comment.coid} pb-1 px-2 first-of-type:pt-2">
-                                    <div class="comment-body">
-                                        <span class="text-[14px] text-color-link">
-                                            <a href="${response.data.comment.url}" target="_blank" class="cursor-pointer text-color-link no-underline">${response.data.comment.author}</a>
-                                        </span>
-                                        <span class="text-[14px]">回复</span>
-                                        <span class="text-[14px] text-color-link">${name}</span>
-                                        <span data-separator=":" class="before:content-[attr(data-separator)] text-[14px] cursor-help comment-to" data-coid="${response.data.comment.coid}" data-cid="${response.data.comment.cid}" data-name="${response.data.comment.author}">${param.text}</span>
-                                        ${waiting}
-                                    </div>
-                                </li>`);
-
-                        } else {
-                            // 如果没有coid，那么就在最下方显示评论框
-                            document.querySelector('.comment-ul-cid-' + param.cid).insertAdjacentHTML('beforeend', `
-                                <li class="pos-rlt comment-li-coid-${response.data.comment.coid}">
-                    <div class="comment-body">
-                        <span class="text-[14px] text-color-link">
-                            <a href="${response.data.comment.url}" target="_blank" class="cursor-pointer text-color-link no-underline">${response.data.comment.author}</a>
-                        </span>
-                        <span data-separator=":" class="before:content-[attr(data-separator)] text-[14px] cursor-help comment-to" data-coid="${response.data.comment.coid}" data-cid="${response.data.comment.cid}" data-name="${response.data.comment.author}">${param.text}</span>
-                        ${waiting}
-                    </div>
-                </li>
-                                `);
-                        }
-                    } else {
-                        // 评论异常，弹出进行提醒
-                        alert(response.data.msg);
-                    }
-
-                })
-                .catch(function (error) {
-                    alert('系统异常，请稍候重试')
                 });
-        });
 
-    });
-}
+                // 重新初始化Fancybox
+                Fancybox.bind("[data-fancybox]", {
+                    Thumbs: { autoStart: false },
+                    Toolbar: {
+                        display: {
+                            left: ["infobar"],
+                            middle: ["zoomIn", "zoomOut", "toggle1to1", "rotateCCW", "rotateCW", "flipX", "flipY"],
+                            right: ["slideshow", "thumbs", "close"],
+                        },
+                    },
+                    loop: true,
+                    keyboard: {
+                        Escape: "close", Delete: "close", Backspace: "close",
+                        PageUp: "next", PageDown: "prev",
+                        ArrowUp: "next", ArrowDown: "prev",
+                        ArrowRight: "next", ArrowLeft: "prev",
+                    },
+                });
 
-/**
- * 点击点赞
- */
-function clickLike() {
-    $(".like-to").off('click');
-    $(".like-to").on('click', function (e) {
-        let cid = $(e.target).data('cid');
-        let agree = $(e.target).data('agree');
-
-        if (cid == 0) {
-            return alert('点赞失败');
-        }
-
-        let param = { cid: cid, agree: agree };
-        axios.post(globalData.webSiteHomeUrl + 'api/like', param, { headers: { 'content-type': 'application/x-www-form-urlencoded' } })
-            .then(function (response) {
-                console.log(response);
-                if (response.data.status == 1) {
-                    // 点赞成功
-                    if ($(".like-agree-" + cid).hasClass('hidden')) {
-                        $(".like-agree-" + cid).removeClass('hidden');
-                        $(".like-agree-" + cid).addClass('flex');
+                // 检查是否还有下一页
+                const $newPagination = $response.find('.total-pages');
+                if ($newPagination.length) {
+                    const newTotalPages = parseInt($newPagination.data('total'));
+                    if (page >= newTotalPages) {
+                        scrollloadInstance.noMoreData();
+                        return;
                     }
-
-                    // agree=1是点赞，0是取消点赞
-                    if (agree === 1) {
-                        // 显示取消
-                        $(".like-to-cancel-" + cid).removeClass('hidden');
-                        $(".like-to-cancel-" + cid).addClass('flex');
-
-                        $(".like-to-show-" + cid).addClass('hidden');
-                        $(".like-to-show-" + cid).removeClass('flex');
-                    } else {
-                        $(".like-to-cancel-" + cid).addClass('hidden');
-                        $(".like-to-cancel-" + cid).removeClass('flex');
-
-                        $(".like-to-show-" + cid).removeClass('hidden');
-                        $(".like-to-show-" + cid).addClass('flex');
-
-                        if (response.data.agree == 0) {
-                            if (!$(".like-agree-" + cid).hasClass('hidden')) {
-                                $(".like-agree-" + cid).addClass('hidden');
-                                $(".like-agree-" + cid).removeClass('flex');
-                            }
-                        }
-                    }
-
-                    $(".fk-cid-" + cid).text(response.data.agree);
                 }
-            })
-            .catch(function (error) {
 
-            });
-    });
+                // 继续允许加载
+                scrollloadInstance.unLock();
 
-}
-
-/**
- * 隐藏所有互动悬浮框
- */
-function hiddenHudongModal() {
-    let hudongModalList = document.querySelectorAll('.hudong-modal');
-
-    hudongModalList.forEach(item => {
-        if (!item.classList.contains('hidden')) {
-            item.classList.add('hidden');
+            } catch (error) {
+                scrollloadInstance.throwException();
+            }
+        },
+        error: function(xhr, status, error) {
+            // 如果是404错误，说明页面不存在，直接显示没有更多数据
+            if (xhr.status === 404) {
+                scrollloadInstance.noMoreData();
+            } else {
+                scrollloadInstance.throwException();
+            }
         }
     });
 }
 
-/**
- * 获取评论框Html
- */
-function getCommentFormHtml(cid, coid, name) {
-
-    let author = window.localStorage.getItem('author');
-    let mail = window.localStorage.getItem('mail');
-    let url = window.localStorage.getItem('url');
-    if (author == null) {
-        author = '';
+// 获取或生成匿名用户ID
+function getAnonymousId() {
+    let anonymousId = localStorage.getItem('icefox_anonymous_id');
+    if (!anonymousId) {
+        // 生成唯一ID（使用时间戳 + 随机数）
+        anonymousId = 'anon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('icefox_anonymous_id', anonymousId);
     }
-    if (mail == null) {
-        mail = '';
-    }
-    if (url == null) {
-        url = '';
-    }
-
-    // 判断是否登录
-    let loginClass = "";
-    let loginIs = $("#login-is").text();
-    if (loginIs === '1') {
-        // 已登录
-        author = $.trim($("#login-screenName").text());
-        mail = $.trim($("#login-mail").text());
-        url = $.trim($("#login-url").text());
-        loginClass = "hidden";
-    }
-
-    let placeholder = '回复内容';
-    if (coid) {
-        placeholder = '回复@' + name;
-    }
-    return `
-    <li class="comment-form px-2 py-2" data-cid="${cid}" data-coid="${coid}">
-    <div class="bg-white dark:bg-[#262626] p-2 rounded-sm border-1 border-solid border-[#07c160]">
-        <div class="grid grid-cols-3 gap-2 ${loginClass}">
-            <input placeholder="昵称" class="border-0 outline-none bg-color-primary dark:bg-[#262626] p-1 rounded-sm input-author dark:text-[#cccccc]" data-cid="${cid}" data-coid="${coid}" value="${author}" />
-            <input placeholder="网址" class="border-0 outline-none bg-color-primary dark:bg-[#262626] p-1 rounded-sm input-url dark:text-[#cccccc]" data-cid="${cid}" data-coid="${coid}" value="${url}" />
-            <input placeholder="邮箱" class="border-0 outline-none bg-color-primary dark:bg-[#262626] p-1 rounded-sm input-mail dark:text-[#cccccc]" data-cid="${cid}" data-coid="${coid}" value="${mail}" />
-        </div>
-        <div class="mt-2">
-            <input placeholder="${placeholder}" class="border-0 outline-none w-full rounded-sm p-1 input-text dark:bg-[#262626] dark:text-[#cccccc]" data-cid="${cid}" data-coid="${coid}" />
-        </div>
-        <div class="face-container hidden" data-cid="${cid}" data-coid="${coid}">
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😀</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😄</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😁</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😆</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😅</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😂</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤣</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😊</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😇</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🙂</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🙃</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😉</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😌</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😍</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥰</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😘</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😗</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😙</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😚</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😋</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😛</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😝</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😜</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤪</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤨</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🧐</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤓</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😎</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤩</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥳</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😏</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😒</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😞</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😔</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😟</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😕</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🙁</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">☹️</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😣</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😖</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😫</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😩</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥺</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😢</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😭</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😤</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😠</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😡</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤬</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤯</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😳</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥵</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥶</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😱</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😨</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😰</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😥</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😓</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤗</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤔</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤭</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤫</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤥</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😶</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😐</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😑</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😬</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🙄</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😯</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😦</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😧</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😮</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😲</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥱</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😴</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤤</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😪</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😵</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤐</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🥴</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤢</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤮</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤧</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">😷</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤒</span>
-<span class="cursor-pointer face-item" data-cid="${cid}" data-coid="${coid}">🤕</span>
-        </div>
-        <div class="flex justify-end mt-2">
-            <div class="face dark:face-dark mr-2 cursor-pointer" data-cid="${cid}" data-coid="${coid}"></div>
-            <button class="btn-comment bg-[#07c160] border-0 outline-none text-white cursor-pointer rounded-sm" data-cid="${cid}" data-coid="${coid}">回复</button>
-        </div>
-    </div>
-</li>
-    `;
+    return anonymousId;
 }
 
-/**
- * 移除其他评论框
- */
-function removeAllCommentForm() {
-    $(".comment-form").remove();
-}
+// 初始化点赞功能
+function initLikes() {
+    // 确保匿名ID已生成
+    getAnonymousId();
 
-/**
- * 下拉加载底部显示文字生成html
- */
-function generateHtml(html) {
-    return html;
-}
+    // 初始化时先隐藏所有点赞列表,等数据加载后再决定是否显示
+    $('.pcc-like-list').hide();
 
-let imgElementArray = [];
-let gallery;
+    // 检查并隐藏没有评论的容器
+    $('.post-comment-container').each(function() {
+        const $commentContainer = $(this);
+        const $commentList = $commentContainer.find('.pcc-comment-list');
+        const hasComments = $commentList.find('.pcc-comment-item').length > 0;
 
-/**
- * 大图预览。给大图元素绑定点击事件
- */
-function imagePreviewAddEventListener(element) {
-    imgElementArray.push(element);
-    element.addEventListener('click', event => preview(event));
-}
+        // 如果没有评论,先隐藏整个容器,等点赞数据加载后再决定是否显示
+        if (!hasComments) {
+            $commentContainer.hide();
+        }
+    });
 
-function preview(event) {
-    Fancybox.bind("[data-fancybox]", {
-        Thumbs: false // 不显示底部图片组
+    // 获取页面上所有文章的点赞数据
+    const $likeLists = $('.pcc-like-list');
+
+    $likeLists.each(function() {
+        const $likeContainer = $(this);
+        const cid = $likeContainer.data('cid');
+        if (cid) {
+            loadLikeData(cid, $likeContainer);
+        }
+    });
+
+    // 绑定点赞列表的点击事件
+    $(document).on('click', '.pcc-like-list', function(e) {
+        e.stopPropagation();
+        const cid = $(this).data('cid');
+        if (cid) {
+            doToggleLike(cid, $(this));
+        }
     });
 }
 
-/**
- * 移除所有图片大图预览绑定事件
- */
-function imagePreviewRemoveAllEventListener() {
-    imgElementArray.forEach(e => {
-        e.removeEventListener('click', event => preview(event));
-    })
+// 加载点赞数据
+function loadLikeData(cid, $container) {
+    const anonymousId = getAnonymousId();
 
-    imgElementArray = [];
+    // 获取评论用户信息(如果用户已经评论过)
+    const commentAuthor = localStorage.getItem('icefox_comment_author') || '';
+    const commentEmail = localStorage.getItem('icefox_comment_email') || '';
+
+    let url = window.ICEFOX_CONFIG.actionUrl + '?do=getLikes&cid=' + cid + '&anonymous_id=' + encodeURIComponent(anonymousId);
+
+    // 如果有评论用户信息,携带到请求中
+    if (commentAuthor && commentEmail) {
+        url += '&comment_author=' + encodeURIComponent(commentAuthor) + '&comment_email=' + encodeURIComponent(commentEmail);
+    }
+
+    $.ajax({
+        url: url,
+        type: 'GET',
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                updateLikeUI($container, response.likes, response.isLiked, response.likeUsers || []);
+            }
+        }
+    });
 }
 
+// 切换点赞状态
+function doToggleLike(cid, $container) {
+    // 防止重复点击
+    if ($container.hasClass('liking')) {
+        return;
+    }
+
+    $container.addClass('liking');
+
+    const anonymousId = getAnonymousId();
+
+    // 获取评论用户信息(如果用户已经评论过)
+    const commentAuthor = localStorage.getItem('icefox_comment_author') || '';
+    const commentEmail = localStorage.getItem('icefox_comment_email') || '';
+
+    let url = window.ICEFOX_CONFIG.actionUrl + '?do=like&cid=' + cid + '&anonymous_id=' + encodeURIComponent(anonymousId);
+
+    // 如果有评论用户信息,携带到请求中
+    if (commentAuthor && commentEmail) {
+        url += '&comment_author=' + encodeURIComponent(commentAuthor) + '&comment_email=' + encodeURIComponent(commentEmail);
+    }
+
+    $.ajax({
+        url: url,
+        type: 'POST',
+        dataType: 'json',
+        success: function(response) {
+            if (response.success) {
+                updateLikeUI($container, response.likes, response.isLiked, response.likeUsers || []);
+            }
+        },
+        complete: function() {
+            $container.removeClass('liking');
+        }
+    });
+}
+
+// 更新点赞UI
+function updateLikeUI($container, likes, isLiked, likeUsers) {
+    const cid = $container.data('cid');
+
+    // 获取父容器 post-comment-container
+    const $commentContainer = $container.closest('.post-comment-container');
+
+    // 确保 likes 是数字类型
+    likes = parseInt(likes) || 0;
+
+    // 如果没有点赞,隐藏点赞列表
+    if (likes === 0) {
+        $container.hide();
+
+        // 检查是否有评论,如果也没有评论则隐藏整个 post-comment-container
+        const $commentList = $commentContainer.find('.pcc-comment-list');
+        const hasComments = $commentList.find('.pcc-comment-item').length > 0;
+
+        if (!hasComments) {
+            $commentContainer.hide();
+        }
+
+        // 仍需更新菜单按钮状态
+        const $menuBtn = $('.like-menu-btn[data-cid="' + cid + '"]');
+        const $menuText = $menuBtn.find('.like-menu-text');
+        const $menuIcon = $menuBtn.find('.like-menu-icon');
+        $menuText.text('点赞');
+        $menuIcon.attr('fill', 'none');
+        $menuIcon.css('color', '');
+        return;
+    }
+
+    // 有点赞时显示点赞列表和父容器
+    $container.show();
+    $commentContainer.show();
+
+    // 更新点赞列表的图标样式
+    const $icon = $container.find('.like-icon');
+    if (isLiked) {
+        // 已点赞 - 填充红色
+        $icon.attr('fill', 'currentColor');
+        $icon.css('color', '#ff6b6b');
+    } else {
+        // 未点赞 - 空心
+        $icon.attr('fill', 'none');
+        $icon.css('color', '');
+    }
+
+    // 更新点赞文本
+    const $usersText = $container.find('.like-users-text');
+    const likesText = generateLikesText(likes, likeUsers);
+    $usersText.text(likesText);
+
+    // 更新菜单中的点赞按钮文本和图标
+    const $menuBtn = $('.like-menu-btn[data-cid="' + cid + '"]');
+    const $menuText = $menuBtn.find('.like-menu-text');
+    const $menuIcon = $menuBtn.find('.like-menu-icon');
+
+    if (isLiked) {
+        // 已点赞 - 显示"取消点赞"和红色图标
+        $menuText.text('取消点赞');
+        $menuIcon.attr('fill', 'currentColor');
+        $menuIcon.css('color', '#ff6b6b');
+    } else {
+        // 未点赞 - 显示"点赞"和空心图标
+        $menuText.text('点赞');
+        $menuIcon.attr('fill', 'none');
+        $menuIcon.css('color', '');
+    }
+}
+
+// 生成点赞文本
+function generateLikesText(likes, likeUsers) {
+    if (likes === 0) {
+        return '0 个点赞';
+    }
+
+    if (!likeUsers || likeUsers.length === 0) {
+        return likes + ' 个点赞';
+    }
+
+    // 显示前3个用户名
+    const displayCount = Math.min(3, likeUsers.length);
+    const names = likeUsers.slice(0, displayCount).map(user => user.author).join('、');
+
+    // 格式：昵称1、昵称2、昵称3 X个点赞
+    return names + '、' + likes + '个点赞';
+}
+
+// Alpine.js 中的点赞函数（从菜单点击）
+window.toggleLike = function(event, cid) {
+    event.stopPropagation();
+    const $container = $('.pcc-like-list[data-cid="' + cid + '"]');
+    if ($container.length) {
+        doToggleLike(cid, $container);
+    }
+};
+function printCopyright() {
+    console.log('%cIcefox主题 By xiaopanglian v3.0.3 %chttps://www.xiaopanglian.com', 'color: white;  background-color: #99cc99; padding: 10px;', 'color: white; background-color: #ff6666; padding: 10px;');
+}
 /**
- * pjax请求，追加列表分页
+ * 回到顶部功能
  */
-async function pjax(pageIndex, container) {
-    let url = globalData.webSiteHomeUrl + 'page/' + pageIndex;
-    await axios.get(url).then(async (e) => {
-        // 获取新内容
-        var domParser = new DOMParser();
-        var newContent = domParser.parseFromString(e.data, 'text/html').querySelector(container);
+function initBackToTop() {
+    const $backToTop = $('#backToTop');
+    const showThreshold = 320; // 滚动超过320px时显示按钮
 
-        // 追加到当前列表的最下方
-        imagePreviewRemoveAllEventListener();
+    // 监听滚动事件
+    $(window).on('scroll', function() {
+        const scrollTop = $(window).scrollTop();
 
-        var articleContainer = document.querySelector(container);
-        articleContainer.appendChild(newContent);
+        if (scrollTop > showThreshold) {
+            $backToTop.addClass('show');
+        } else {
+            $backToTop.removeClass('show');
+        }
+    });
 
-        // 重新绑定图片预览
-        let previewImages = document.querySelectorAll('.preview-image');
-        previewImages.forEach((element) => {
-            imagePreviewAddEventListener(element);
+    // 点击按钮回到顶部
+    $backToTop.on('click', function() {
+        $('html, body').animate({
+            scrollTop: 0
+        }, 600, 'linear', function() {
+            // 动画完成后隐藏按钮
+            $backToTop.removeClass('show');
         });
-        // 重新绑定互动
-        clickHudong();
-        // 重新绑定评论
-        clickComment();
-        // 重新绑定点赞
-        clickLike();
-
-        loadQW();
-        clickQW();
-        clickSS();
-
-        // 异步加载
-        lazyLoadInstance.update();
-    }).catch(e => {
-
     });
-}
-
-/**
- * 回到顶部
- */
-var timeOut;
-
-function scrollToTop() {
-    // if (document.body.scrollTop != 0 || document.documentElement.scrollTop != 0) {
-    //     window.scrollBy(0, -50);
-    //     timeOut = setTimeout('scrollToTop()', 10);
-    // } else clearTimeout(timeOut);
-    // 使用Anime.js进行平滑滚动
-    anime({
-        targets: 'html, body',
-        scrollTop: 0,
-        duration: 300,
-        easing: 'linear'
-    });
-}
-
-/**
- * 加载音乐
- */
-function loadAudio(src) {
-    globalData.audio.src = src;
-    globalData.audio.load();
-}
-
-function closeAudio() {
-    globalData.audio.pause();
-    globalData.audio.src = '';
-    globalData.playMusicId = 0;
-
-    refreshAudioUI();
-}
-
-/**
- * 播放音乐
- */
-function playAudio(cid, src, cover) {
-    if (globalData.playMusicId != cid) {
-        loadAudio(src);
-        globalData.playMusicId = cid;
-    }
-    globalData.audio.play();
-
-    refreshAudioUI();
-
-    // 隐藏播放按钮，显示暂停按钮
-    $("#music-play-" + cid).addClass("hidden");
-    $("#music-pause-" + cid).removeClass("hidden");
-
-    // 显示悬浮播放器
-    showFixedMusicPlayer(cover);
-
-    showTopMusicPlayUI();
-
-    globalData.isTopMusic = false;
-
-    // 顶部音乐进度归0
-    $("#top-music-jdt").css('width', "0rem");
-}
-
-/**
- * 显示悬浮播放器
- */
-function showFixedMusicPlayer(cover) {
-    if ($("#music-modal").is(":hidden")) {
-        $("#music-modal").show();
-    }
-
-    $("#fixed-music-cover").attr("src", cover);
-
-    fixedMusicPlayerPlayUI();
-}
-
-function playAudioOne() {
-    globalData.audio.play();
-}
-
-/**
- * 暂停音乐
- */
-function pauseAudio(cid) {
-    globalData.audio.pause();
-    // 隐藏暂停按钮，显示播放按钮
-    $("#music-play-" + cid).removeClass("hidden");
-    $("#music-pause-" + cid).addClass("hidden");
-
-    $("#music-img-" + cid).removeClass("rotate-animation");
-
-    fixedMusicPlayerPauseUI();
-}
-
-/**
- * 仅播放音乐。
- */
-function pauseAudioOne() {
-    globalData.audio.pause();
-}
-
-/**
- * 悬浮播放器暂停UI
- */
-function fixedMusicPlayerPauseUI() {
-    $("#fixed-music-play").show();
-    $("#fixed-music-pause").hide();
-}
-/**
- * 悬浮播放器播放UI
- */
-function fixedMusicPlayerPlayUI() {
-    $("#fixed-music-play").hide();
-    $("#fixed-music-pause").show();
-}
-/**
- * 刷新播放器UI
- */
-function refreshAudioUI() {
-
-    // 隐藏其他文章的播放器播放按钮
-    $.each($(".music-play"), function (index, item) {
-        $(item).removeClass("hidden");
-    });
-    $.each($(".music-pause"), function (index, item) {
-        $(item).addClass("hidden");
-    });
-
-    fixedMusicPlayerPauseUI();
-}
-
-/**
- * 打开朋友圈弹框
- */
-function showFriendModal() {
-    $("#friend-modal").show();
-    $("body").addClass("overflow-hidden");
-}
-
-/**
- * 关闭朋友圈弹框
- */
-function closeFriendModal() {
-    $("#friend-modal").hide();
-    $("body").removeClass("overflow-hidden");
-}
-
-/**
- * 切换暗黑模式
- */
-function toggleDarkMode() {
-    const html = document.documentElement;
-    html.classList.toggle('dark');
-
-    // 保存用户偏好到本地存储
-    const isDark = html.classList.contains('dark');
-    localStorage.setItem('darkMode', isDark);
-
-    globalData.isDark = isDark;
-
-    if(isDark){
-        $(".btn-moon").hide();
-        $(".btn-sun").show();
-    }else{
-        $(".btn-moon").show();
-        $(".btn-sun").hide();
-    }
-}
-
-/**
- * 初始化暗黑模式
- */
-function initDarkMode() {
-    const isDarkMode = localStorage.getItem('darkMode') === 'true';
-    if (isDarkMode) {
-        document.documentElement.classList.add('dark');
-
-    }
-    globalData.isDark = isDarkMode;
-    
-    if(isDarkMode){
-        $(".btn-moon").hide();
-        $(".btn-sun").show();
-    }else{
-        $(".btn-moon").show();
-        $(".btn-sun").hide();
-    }
 }

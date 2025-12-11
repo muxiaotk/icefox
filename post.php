@@ -1,413 +1,164 @@
 <?php
-// 详情页
-if (!defined('__TYPECHO_ROOT_DIR__'))
-    exit;
-$isSingle = false;
-$lineClamp = 'line-clamp-4';
+if (!defined('__TYPECHO_ROOT_DIR__')) exit;
 
-if ($this->is('single')) {
-    $isSingle = true;
-    $lineClamp = '';
-}
+/**
+ * 文章详情页
+ *
+ * @package icefox
+ * @author 小胖脸
+ * @version 3.0.0
+ * @link https://xiaopanglian.com
+ */
+
+// 包含头部文件
+$this->need('header.php');
 ?>
 
-<?php $this->need('/components/header.php'); ?>
+<main>
+    <?php $this->need('components/head.php'); ?>
 
-
-<?php $this->need('/components/single-top.php'); ?>
-    <div class="bg-white dark:bg-[#323232] dark:text-[#cccccc] mx-auto main-container">
-
-        <?php $this->need('/components/option-header.php'); ?>
-
-        <div class="article-container">
-            <?php $this->widget('Widget_Archive@icefox' . $this->cid, 'pageSize=1&type=post', 'cid=' . $this->cid)->to($item); ?>
-            <?php $item = (object)$item; ?>
-            <article class="flex flex-row border-b borer-b-2 dark:border-gray-600 border-gray-200 pt-5 pl-5 pr-5">
-                <div class="mr-3">
-                    <div class="w-9 h-9">
-                        <?php
-                        $authorId = $item->authorId;
-                        $archiveUserAvatarUrl = $this->options->archiveUserAvatarUrl;
-                        if (!empty($archiveUserAvatarUrl)) {
-                            ?>
-                            <img src="<?php echo $archiveUserAvatarUrl; ?>"
-                                 class="w-9 h-9 object-cover rounded-lg preview-image"/>
-                            <?php
-                        } else {
-                            ?>
-                            <img src="<?php echo getUserAvatar($authorId); ?>"
-                                 class="w-9 h-9 object-cover rounded-lg preview-image"/>
-                            <?php
-                        }
-                        ?>
-                    </div>
+    <section class="content-container">
+        <div class="post-detail" x-data="commentReplyManager()">
+            <!-- 文章主体 -->
+            <article class="post-item post-detail-item">
+                <div class="post-item-left">
+                    <a href="<?php $this->author->permalink() ?>">
+                        <img alt="<?php $this->author() ?>"
+                             src="<?php echo getGravatarUrl($this->author->mail, 64, 'identicon', 'g'); ?>">
+                    </a>
                 </div>
-                <div
-                    class="w-full border-t-0 border-l-0 border-r-0 border-b-1 dark:border-gray-600 border-gray-100 border-solid pb-1">
-                    <section class="flex flex-row justify-between items-center mb-1">
-                    <span class="text-color-link cursor-default text-[14px]">
-                        <?php print_r(_getUserScreenNameByCid($item->cid)['screenName']); ?>
-                    </span>
+                <div class="post-item-right">
+                    <!-- 作者信息 -->
+                    <h2 class="post-title">
+                        <a href="<?php $this->author->permalink() ?>"><?php $this->author() ?></a>
                         <?php
-                        $advertiseData = getArticleFieldsByCid($item->cid, 'isAdvertise');
-                        if (count($advertiseData) > 0) {
-                            $isAdvertise = $advertiseData[0]['str_value'];
-                            if ($isAdvertise == true) {
-                                ?>
-                                <span class="text-[12px] dark:bg-[#262626] bg-[#f0f0f0] p-1 text-[#c6c6c6] rounded-sm">广告</span>
-                            <?php }
-                        } ?>
-                    </section>
-                    <section
-                        class="mb-1 cursor-default text-[14px] article-content break-all <?php echo $lineClamp; ?> content-<?php echo $item->cid; ?>"
-                        data-cid="<?php echo $item->cid; ?>">
-                        <?php
-                        echo removeImgAndVideoTags($this::markdown($item->text));
+                        // 显示置顶标识
+                        if (getPostIsTop($this->cid)):
                         ?>
-                    </section>
-                    <?php
-                    if (!$isSingle) {
-                        ?>
-                        <div
-                            class="text-[14px] text-color-link cursor-pointer qw qw-<?php echo $item->cid; ?> hidden mb-1"
-                            data-cid="<?php echo $item->cid; ?>">全文
-                        </div>
-                        <div
-                            class="text-[14px] text-color-link cursor-pointer ss ss-<?php echo $item->cid; ?> hidden mb-1"
-                            data-cid="<?php echo $item->cid; ?>">收起
-                        </div>
+                            <span class="top-badge">置顶</span>
+                        <?php endif; ?>
                         <?php
-                    }
-                    ?>
-
-                    <?php
-                    $music = getArticleFieldsByCid($item->cid, 'music');
-                    if (count($music) > 0 && !empty($music[0]['str_value'])) {
-                        $music = $music[0]['str_value'];
-                        $musicArr = explode('||', $music);
+                        // 显示广告标识
+                        $isAdvertise = getArticleFieldsByCid($this->cid, 'isAdvertise');
+                        if (!empty($isAdvertise) && ($isAdvertise[0]['int_value'] == 1 || $isAdvertise[0]['str_value'] == '1')):
                         ?>
-                        <section class="w-full mb-1">
-                            <figure class="flex overflow-hidden rounded-sm music-card m-0 bg-cover bg-center "
-                                    style="background-color:#A2A3A1;">
-                                <div
-                                    class="w-full h-full bg-cover bg-center backdrop-blur-lg backdrop-filter bg-opacity-50 flex flex-row relative">
-                                    <img src="<?php echo $musicArr[3]; ?>"
-                                         class="h-full w-auto aspect-square object-cover music-img"
-                                         id="music-img-<?php echo $item->cid; ?>"/>
-                                    <div class="flex flex-col text-white h-full justify-center pl-[5px]">
-                                    <span class="mt-1 truncate music-card-text">
-                                        <?php echo $musicArr[0]; ?>
-                                    </span>
-                                        <span class="mt-1 truncate music-card-text">
-                                        <?php echo $musicArr[1]; ?>
-                                    </span>
-                                    </div>
-                                    <div class="music-card-play-position">
-                                        <img width="36" height="36"
-                                             src="<?php $this->options->themeUrl('assets/svgs/music-play-light.svg'); ?>"
-                                             @click="playAudio(<?php echo $item->cid; ?>, '<?php echo $musicArr[2]; ?>', '<?php echo $musicArr[3]; ?>')"
-                                             id="music-play-<?php echo $item->cid; ?>" class="music-play"/>
-                                        <img width="36" height="36"
-                                             src="<?php $this->options->themeUrl('assets/svgs/music-pause-light.svg'); ?>"
-                                             class="music-pause hidden" @click="pauseAudio(<?php echo $item->cid; ?>)"
-                                             id="music-pause-<?php echo $item->cid; ?>"/>
-                                    </div>
-                            </figure>
-                        </section>
-                        <?php
-                    }
-                    ?>
+                            <span class="ad-badge">广告</span>
+                        <?php endif; ?>
+                    </h2>
 
-                    <?php
-                    $friend_video = getArticleFieldsByCid($item->cid, 'friend_video');
-                    if (count($friend_video) > 0 && !empty($friend_video[0]['str_value'])) {
-                        $friendVideo = $friend_video[0]['str_value'];
-                        if (!empty($friendVideo)) {
-                            $autoplay = '';
-                            if ($this->options->autoPlayVideo == 'yes') {
-                                $autoplay = 'autoplay';
-                            } else {
-                                $autoplay = '';
-                            }
-                            $autoMuted = '';
-                            if ($this->options->autoMutedPlayVideo == 'yes') {
-                                $autoMuted = 'muted';
-                            } else {
-                                $autoMuted = '';
-                            }
-                            ?>
-                            <section class="grid grid-cols-12 gap-1 multi-pictures overflow-hidden mb-3"
-                                     id="preview-<?php echo $item->cid; ?>">
-                                <div class="overflow-hidden rounded-lg cursor-zoom-in w-full col-span-10">
-                                    <video
-                                        data-src="<?php echo $friendVideo ?>" <?php echo $autoplay; ?> <?php echo $autoMuted; ?>
-                                        loop preload="auto"
-                                        controls="controls" class="w-full js-player"
-                                        data-cid="<?php echo $item->cid; ?>"
-                                        data-play="" style="--plyr-color-main:#dcdfe5;"
-                                        id="v-<?php echo $item->cid; ?>">您的浏览器不支持video标签
-                                    </video>
-                                </div>
-                            </section>
-                            <?php
-                        }
-                    } else {
-                        $contentPictures = getAllImages($this::markdown($item->text));
-                        $friendPicture = getArticleFieldsByCid($item->cid, 'friend_pictures');
+                    <!-- 文章内容（完整显示） -->
+                    <div class="post-content">
+                        <?php echo themeContent($this); ?>
+                    </div>
 
-                        if (count($friendPicture) > 0) {
-                            foreach ($friendPicture as $tmpFriendPic) {
-                                $onePic = $tmpFriendPic['str_value'];
+                    <!-- 详情页不需要单独显示视频和图片，因为已经在 content 中显示了 -->
 
-                                $friendPictures = explode(',', $onePic);
-                                foreach ($friendPictures as $friendPic) {
-                                    array_push($contentPictures, $friendPic);
-                                }
-                            }
-                        }
-
-                        $picture_list = array_filter(array_slice($contentPictures, 0, 9));
-
-                        if (count($picture_list) == 1) {
-                            $exten = pathinfo($picture_list[0], PATHINFO_EXTENSION);
-                            if ($exten)
-                                ?>
-                                <section class="grid grid-cols-3 gap-1 multi-pictures overflow-hidden mb-3"
-                                id="preview-<?php echo $item->cid; ?>">
-                            <div class="overflow-hidden cursor-zoom-in col-span-2">
-                                <img data-src="<?php echo $picture_list[0] ?>" data-fancybox="<?php echo $item->cid; ?>"
-                                     class="cursor-zoom-in preview-image max-w-full max-h-64"
-                                     data-cid="<?php echo $item->cid; ?>"/>
+                    <!-- 文章位置 -->
+                    <?php $this->need('components/post/post-position.php'); ?>
+                    <div class="post-time">
+                        <time
+                            datetime="<?php $this->date('yyyy年mm月dd日'); ?>"><?php $this->date('Y年m月d日'); ?></time>
+                        <div class="post-time-comment" x-data="{ptcmShow: false}"
+                             :id="'ptcm-' + <?php echo $this->cid; ?>">
+                            <div class="ptc-more" @click="togglePostTimeComment($event, <?php echo $this->cid; ?>)">
+                                <svg t="1709204592505" class="icon" viewBox="0 0 1024 1024" version="1.1"
+                                     xmlns="http://www.w3.org/2000/svg"
+                                     p-id="16237" width="16" height="16">
+                                    <path d="M229.2 512m-140 0a140 140 0 1 0 280 0 140 140 0 1 0-280 0Z"
+                                          p-id="16238" fill="#8a8a8a"></path>
+                                    <path d="M794.8 512m-140 0a140 140 0 1 0 280 0 140 140 0 1 0-280 0Z" p-id="16239"
+                                          fill="#8a8a8a"></path>
+                                </svg>
                             </div>
-                            </section>
-                            <?php
-
-                        } else if (count($picture_list) == 4) {
-                            ?>
-                            <section class="grid grid-cols-3 gap-1 multi-pictures overflow-hidden mb-3"
-                                     id="preview-<?php echo $item->cid; ?>">
-                                <div class="col-span-2 grid grid-cols-2 gap-1">
-                                    <?php
-                                    foreach ($picture_list as $picture): ?>
-                                        <div class="overflow-hidden cursor-zoom-in w-full h-0 pt-[100%] relative">
-                                            <img data-src="<?php echo $picture ?>"
-                                                 data-fancybox="<?php echo $item->cid; ?>"
-                                                 class="w-full h-full object-cover absolute top-0 cursor-zoom-in preview-image"
-                                                 data-cid="<?php echo $item->cid; ?>" alt=""/>
-                                        </div>
-                                    <?php endforeach; ?>
+                            <div class="post-time-comment-modal" x-show="ptcmShow"
+                                 x-transition.in.duration.300ms.origin.top.right>
+                                <div class="ptcm-good like-menu-btn" data-cid="<?php echo $this->cid; ?>"
+                                     @click="toggleLike($event, <?php echo $this->cid; ?>)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" height="16"
+                                         width="16"
+                                         stroke-width="1.5" stroke="currentColor" class="size-6 like-menu-icon">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                              d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/>
+                                    </svg>
+                                    <span class="like-menu-text">点赞</span>
                                 </div>
-                            </section>
-                            <?php
-                        } else if (count($picture_list) > 0) {
-                            ?>
-                            <section class="grid grid-cols-3 gap-1 multi-pictures overflow-hidden mb-3"
-                                     id="preview-<?php echo $item->cid; ?>">
-                                <?php
-                                foreach ($picture_list as $picture) {
-                                    $exten = pathinfo($picture, PATHINFO_EXTENSION);
-                                    if ($exten)
-                                        ?>
-                                        <div class="overflow-hidden cursor-zoom-in w-full h-0 pt-[100%] relative">
-                                        <img data-src="<?php echo $picture ?>" data-fancybox="<?php echo $item->cid; ?>"
-                                                                               class="w-full h-full object-cover absolute top-0 cursor-zoom-in preview-image"
-                                                                               data-cid="<?php echo $item->cid; ?>" />
-                                    </div>
-                                    <?php
-                                }
-                                ?>
-                            </section>
-                            <?php
-                        }
-
-
-                    }
-                    ?>
-
-                    <!--定位-->
-                    <section class="mb-1">
-                        <?php
-                        $position = getArticleFieldsByCid($item->cid, 'position');
-                        if (count($position) > 0) {
-                            ?>
-                            <span class="text-color-link text-xs cursor-default">
-                            <?php echo $position[0]['str_value'] ?>
-                        </span>
-                            <?php
-                        }
-                        ?>
-
-                    </section>
-                    <!--时间-->
-                    <section class="flex flex-row justify-between mb-1">
-                        <div class="text-gray text-xs">
-                            <?php echo getTimeFormatStr($item->created); ?>
+                                <div class="ptcm-comment" @click="showPostReplyForm($event, <?php echo $this->cid; ?>)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" height="16"
+                                         width="16"
+                                         stroke-width="1.5" stroke="currentColor" class="size-6">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                              d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"/>
+                                    </svg>
+                                    评论
+                                </div>
+                            </div>
                         </div>
-                        <div class="w-[30px] h-[20px] relative">
-                            <div class="hudong dark:bg-[#262626] rounded-sm"></div>
-                            <div class="hudong-modal animate-slide-in absolute right-10 top-[-10px] hidden">
-                                <div
-                                    class="bg-[#4c4c4c] text-[#fff] hudong-container pt-2 pb-2 pl-5 pr-5 flex flex-row items-center justify-between">
+                    </div>
 
-                                    <?php
-                                    $isAgree = isAgreeByCid($item->cid);
+                    <!-- 点赞和评论区 -->
+                    <div class="post-comment-container" data-cid="<?php echo $this->cid; ?>">
+                        <!-- 点赞列表 -->
+                        <div class="pcc-like-list" data-cid="<?php echo $this->cid; ?>">
+                            <div class="pcc-like-summary">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" height="16"
+                                     width="16"
+                                     stroke-width="1.5" stroke="currentColor" class="like-icon">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                          d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/>
+                                </svg>
+                                <span class="like-users-text"></span>
+                            </div>
+                        </div>
+
+                        <!-- 评论列表 -->
+                        <div class="pcc-comment-list">
+                            <?php
+                            // 使用与首页相同的评论显示方式
+                            $comments = getPostLatestCommentsWithReplies($this->cid, 20);
+                            foreach ($comments as $comment) {
+                                ?>
+                                <div class="pcc-comment-item"
+                                     data-comment-id="<?php echo $comment['coid'] ?? $comment['id'] ?? 0; ?>">
+                                    <a href="<?php echo htmlspecialchars($comment['url'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($comment['author'], ENT_QUOTES, 'UTF-8'); ?></a>
+                                    <?php if (isset($comment['userGroup']) && $comment['userGroup'] == 'administrator'): ?>
+                                        <span class="author-badge">作者</span>
+                                    <?php endif; ?>
+                                    <span>:</span>
+                                    <span class="cursor-help pcc-comment-content"
+                                          @click="showReplyForm($event, '<?php echo $this->cid; ?>', '<?php echo $comment['coid'] ?? $comment['id'] ?? 0; ?>', <?php echo htmlspecialchars(json_encode($comment['author'], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8'); ?>)"><?php echo htmlspecialchars($comment['text'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                </div>
+                                <?php
+                                foreach ($comment['replies'] as $reply) {
                                     ?>
-                                    <a href="javascript:;"
-                                       class="cursor-pointer text-[#fff] no-underline  items-center text-[14px] like-to <?php echo $isAgree ? 'flex' : 'hidden'; ?> like-to-cancel-<?php echo $item->cid; ?>"
-                                       data-cid="<?php echo $item->cid; ?>" data-agree="0"><span
-                                            class="hudong-liked inline-block mr-2 cursor-pointer"
-                                            data-cid="<?php echo $item->cid; ?>" data-agree="0"></span>取消</a>
-
-                                    <a href="javascript:;"
-                                       class="cursor-pointer text-[#fff] no-underline  items-center text-[14px] like-to <?php echo $isAgree ? 'hidden' : 'flex'; ?> like-to-show-<?php echo $item->cid; ?>"
-                                       data-cid="<?php echo $item->cid; ?>" data-agree="1"><span
-                                            class="hudong-like inline-block mr-2 cursor-pointer"
-                                            data-cid="<?php echo $item->cid; ?>" data-agree="1"></span>赞</a>
-
-                                    <span class="bg-[#454545] h-[22px] w-[1px]"></span>
-                                    <a href="javascript:;"
-                                       class="cursor-pointer text-[#fff] no-underline flex items-center text-[14px] comment-to"
-                                       data-cid="<?php echo $item->cid; ?>"><span
-                                            class="hudong-comment inline-block mr-2 cursor-pointer comment-to"
-                                            data-cid="<?php echo $item->cid; ?>"></span>评论</a>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-                    <!--评论列表-->
-                    <section class="break-all mb-1 overflow-hidden rounded-md">
-                        <?php
-
-                        $commentCount = 5;
-                        if ($this->is('single')) {
-                            $commentCount = 999;
-                        }
-
-                        $count = getCommentCountByCid($item->cid);
-                        $comments = getCommentByCid($item->cid, 0, $commentCount);
-                        $all = getChildCommentByCid($item->cid, 999);
-                        $dzClass = "";
-                        if ($count > 0) {
-                            $dzClass = "border-b-solid";
-                        }
-                        ?>
-                        <?php
-                        $agreeNum = getAgreeNumByCid($item->cid);
-                        $agree = $agreeNum['agree'];
-                        $recording = $agreeNum['recording'];
-                        ?>
-                        <div
-                            class="bg-[#f7f7f7] dark:bg-[#262626] px-3 py-2 bottom-shadow items-center border-1 <?php echo $dzClass; ?> dark:border-gray-600 border-gray-100 <?php echo($agree > 0 ? 'flex' : 'hidden'); ?> like-agree-<?php echo $item->cid; ?>">
-                            <span class="like inline-block mr-2"></span>
-                            <span class="text-[14px] ">
-                            <span class="text-color-link text-[14px]">
-                                <span class="fk-cid-<?php echo $item->cid; ?>">
-                                    <?php echo $agree; ?>
-                                </span> 位访客
-                            </span>
-                        </span>
-                        </div>
-
-                        <div class="index-comments bottom-shadow bg-[#f7f7f7] dark:bg-[#262626] ">
-                            <ul class="list-none p-0 m-0 comment-ul-cid-<?php echo $item->cid; ?> comment-ul">
-                                <?php
-                                if ($comments) {
-                                    foreach ($comments as $comment): ?>
-                                        <li
-                                            class="pos-rlt comment-li-coid-<?php echo $comment['coid'] ?> pb-1 px-2 first-of-type:pt-2">
-                                            <div class="comment-body">
-                                            <span class="text-[14px] text-color-link">
-                                                <a href="<?php echo $comment['url'] ?>" target="_blank"
-                                                   class="cursor-pointer text-color-link no-underline">
-                                                    <?php echo $comment['author']; ?>
-                                                    <?php
-                                                    if ($comment['authorId'] == $item->authorId) {
-                                                        ?>
-                                                        <span
-                                                            class="text-xs text-red-700 border border-red-700 border-solid pl-[1px] pr-[1px] rounded">作者</span>
-                                                        <?php
-                                                    }
-                                                    ?>
-                                                </a>
-                                            </span>
-                                                <span data-separator=":"
-                                                      class="before:content-[attr(data-separator)] text-[14px] cursor-help comment-to"
-                                                      data-coid="<?php echo $comment['coid'] ?>"
-                                                      data-cid="<?php echo $comment['cid'] ?>"
-                                                      data-name="<?php echo $comment['author'] ?>">
-                                                <?php echo strip_tags(preg_replace("/<br>|<p>|<\/p>/", ' ', $comment['text'])) ?>
-                                            </span>
-                                            </div>
-                                        </li>
-
-                                        <?php
-                                        $childComments = getChildCommentByCidOfComplete($comment['coid'], $all);
-                                        if ($childComments) {
-                                            foreach ($childComments as $childComment): ?>
-
-                                                <li class="pos-rlt comment-li-coid-<?php echo $childComment['coid'] ?> pb-1 px-2">
-                                                    <div class="comment-body">
-                                                    <span class="text-[14px] text-color-link">
-                                                        <a href="<?php echo $childComment['url'] ?>" target="_blank"
-                                                           class="cursor-pointer text-color-link no-underline">
-                                                            <?php echo $childComment['author'] ?>
-                                                            <?php
-                                                            if ($childComment['authorId'] == $item->authorId) {
-                                                                ?>
-                                                                <span
-                                                                    class="text-xs text-red-700 border border-red-700 border-solid pl-[1px] pr-[1px] rounded">作者</span>
-                                                                <?php
-                                                            }
-                                                            ?>
-                                                        </a>
-                                                    </span>
-                                                        <span class="text-[14px]">回复</span>
-                                                        <span class="text-[14px] text-color-link">
-                                                        <?php echo $childComment['toAuthor'] ?>
-                                                            <?php
-                                                            if ($childComment['toAuthorId'] == $item->authorId) {
-                                                                ?>
-                                                                <span
-                                                                    class="text-xs text-red-700 border border-red-700 border-solid pl-[1px] pr-[1px] rounded">作者</span>
-                                                                <?php
-                                                            }
-                                                            ?>
-                                                    </span>
-                                                        <span data-separator=":"
-                                                              class="before:content-[attr(data-separator)] text-[14px] cursor-help comment-to"
-                                                              data-coid="<?php echo $childComment['coid'] ?>"
-                                                              data-cid="<?php echo $childComment['cid'] ?>"
-                                                              data-name="<?php echo $childComment['author'] ?>">
-                                                        <?php echo strip_tags(preg_replace("/<br>|<p>|<\/p>/", ' ', $childComment['text'])) ?>
-                                                    </span>
-
-                                                    </div>
-                                                </li>
-                                            <?php endforeach;
-                                        }
-                                        ?>
-
-                                        <?php ?>
-                                    <?php endforeach; ?>
+                                    <div class="pcc-comment-item"
+                                         data-comment-id="<?php echo $reply['coid'] ?? $reply['id'] ?? 0; ?>">
+                                        <a href="<?php echo htmlspecialchars($reply['url'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($reply['author'], ENT_QUOTES, 'UTF-8'); ?></a>
+                                        <?php if (isset($reply['userGroup']) && $reply['userGroup'] == 'administrator'): ?>
+                                            <span class="author-badge">作者</span>
+                                        <?php endif; ?>
+                                        <span>回复</span>
+                                        <a href="<?php echo htmlspecialchars($reply['parentUrl'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($reply['parentAuthor'], ENT_QUOTES, 'UTF-8'); ?></a>
+                                        <?php if (isset($reply['parentUserGroup']) && $reply['parentUserGroup'] == 'administrator'): ?>
+                                            <span class="author-badge">作者</span>
+                                        <?php endif; ?>
+                                        <span>:</span>
+                                        <span class="cursor-help pcc-comment-content"
+                                              @click="showReplyForm($event, '<?php echo $this->cid; ?>', '<?php echo $reply['coid'] ?? $reply['id'] ?? 0; ?>', <?php echo htmlspecialchars(json_encode($reply['author'], JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8'); ?>)"><?php echo htmlspecialchars($reply['text'], ENT_QUOTES, 'UTF-8'); ?></span>
+                                    </div>
                                     <?php
-                                    if ($count > 5 & $commentCount == 5) {
-                                        ?>
-                                        <li class="px-2 pb-1">
-                                            <a href="<?php echo $item->permalink; ?>"
-                                               class="cursor-pointer text-color-link no-underline text-[13px]">查看更多…</a>
-                                        </li>
-
-                                        <?php
-                                    }
                                 }
-                                ?>
-                            </ul>
+                            }
+                            ?>
                         </div>
-                    </section>
+                    </div>
                 </div>
             </article>
         </div>
-    </div><!-- end #main-->
+    </section>
 
-<?php $this->need('/components/modal.php'); ?>
-<?php $this->need('/components/single-footer.php'); ?>
+    <?php $this->need('components/modals/setting.php'); ?>
+    <?php $this->need('components/modals/login.php'); ?>
+    <?php $this->need('components/modals/links.php'); ?>
+</main>
+
+<?php $this->need('footer.php'); ?>
