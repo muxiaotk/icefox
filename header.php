@@ -805,7 +805,9 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
         function mountCustomPlayer(videoUrl, container, vid, poster) {
             <?php
             $customPlayerJs = Helper::options()->videoParseJs ?? '';
-            echo $customPlayerJs ? htmlspecialchars_decode($customPlayerJs) : '// 未配置自定义播放器，使用原生 video';
+            if (!empty($customPlayerJs)) {
+                echo htmlspecialchars_decode($customPlayerJs);
+            }
             ?>
         }
 
