@@ -1102,6 +1102,20 @@ function getPostIsTop($cid)
 }
 
 /**
+ * 从数据库获取文章的原始未渲染文本（Markdown 原文）
+ * 用于在列表页提取短代码，避免被 Typecho Markdown 渲染器破坏短代码格式
+ *
+ * @param int $cid 文章 ID
+ * @return string 原始文本，取不到则返回空字符串
+ */
+function getRawPostText($cid)
+{
+    $db  = Typecho_Db::get();
+    $row = $db->fetchRow($db->select('text')->from('table.contents')->where('cid = ?', intval($cid)));
+    return $row ? (string)$row['text'] : '';
+}
+
+/**
  * 解析音乐短代码并渲染为 HTML
  *
  * @param string $content 文章内容

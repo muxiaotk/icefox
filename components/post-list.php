@@ -36,20 +36,26 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
                         $options = \Widget\Options::alloc();
                         $autoCollapse = $options->autoCollapse !== '0'; // 默认为 true（收起）
 
-                        // 先过滤内容（保留摘要用的标签）
-                        $filtered = filterContent($this->content);
+                        // 从数据库取原始 Markdown/文本（未经 Typecho 渲染），用于提取短代码
+                        // $this->content 是已渲染的 HTML，Markdown 会破坏短代码中的 title 等参数
+                        $rawText = getRawPostText($this->cid);
 
-                        // 生成摘要（音乐短代码不计入截断长度，会完整保留）
-                        $cws = generateContentWithSummaryAndMusic($filtered, 100);
+                        // 从原始文本中提取音乐短代码和视频短代码（不受 Markdown 渲染干扰）
+                        $musicExtracted = extractMusicShortcodes($rawText);
+                        $musicHtml      = !empty($musicExtracted['shortcodes'])
+                            ? parseMusicShortcode(implode("\n", $musicExtracted['shortcodes']))
+                            : '';
 
-                        // 解析音乐短代码
-                        $musicHtml = !empty($cws['music_shortcodes']) ? parseMusicShortcode($cws['music_shortcodes']) : '';
-
-                        // 提取视频短代码（在 filterContent 之前的原始内容中提取，不受 strip_tags 影响）
-                        $videoExtracted = extractVideoShortcodes($this->content);
+                        $videoExtracted = extractVideoShortcodes($rawText);
                         $videoHtml      = !empty($videoExtracted['shortcodes'])
                             ? parseVideoShortcode(implode("\n", $videoExtracted['shortcodes']))
                             : '';
+
+                        // 先过滤已渲染内容（保留摘要用的标签）
+                        $filtered = filterContent($this->content);
+
+                        // 生成摘要（使用已渲染的 HTML 内容做摘要显示，短代码已从原始文本单独提取）
+                        $cws = generateContentWithSummary($filtered, 100);
 
                         if ($autoCollapse) {
                             // 自动收起模式：显示摘要，点击展开全文
