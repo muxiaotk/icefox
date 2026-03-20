@@ -86,6 +86,26 @@ function themeConfig($form)
         _t('设置列表页是否自动截取内容为摘要。选择"是"则显示摘要和展开按钮；选择"否"则直接显示完整内容。')
     );
     $form->addInput($autoCollapse);
+
+    // 视频解析 API 地址
+    $videoParseApi = new Typecho_Widget_Helper_Form_Element_Text(
+        'videoParseApi',
+        NULL,
+        NULL,
+        _t('视频解析 API 地址'),
+        _t('用于解析第三方视频网站链接的 API 地址。短代码 <code>[video vid="..."]</code> 中的 vid 参数会被拼接到此地址后面作为最终播放地址。<br>直接填写 mp4 时无需此项，留空即可（在短代码中直接填写完整 URL 作为 vid 值）。<br>示例：<code>https://api.example.com/parse?url=</code>，最终请求为 <code>https://api.example.com/parse?url=视频ID</code>')
+    );
+    $form->addInput($videoParseApi);
+
+    // 视频播放器自定义 JS
+    $videoParseJs = new Typecho_Widget_Helper_Form_Element_Textarea(
+        'videoParseJs',
+        NULL,
+        NULL,
+        _t('视频播放器自定义 JS'),
+        _t('在此填写调用视频播放器的 JavaScript 代码，用于初始化播放器或处理 API 返回结果。<br>可用变量：<code>videoUrl</code>（最终视频播放地址）、<code>container</code>（播放器容器 DOM 元素）、<code>vid</code>（原始视频 ID）。<br>示例（使用 DPlayer）：<pre>var dp = new DPlayer({ container: container, video: { url: videoUrl } });</pre><br>若留空，则使用主题内置的原生 &lt;video&gt; 标签播放。')
+    );
+    $form->addInput($videoParseJs);
 }
 
 function themeFields($layout)
@@ -1160,7 +1180,70 @@ function themeContent($widget)
     // 解析音乐短代码
     $content = parseMusicShortcode($content);
 
+    // 解析视频短代码
+    $content = parseVideoShortcode($content);
+
     return $content;
+}
+
+/**
+ * 解析视频短代码并渲染为占位容器（播放器由前端 JS 初始化）
+ *
+ * 短代码格式：
+ *   [video vid="BV1xx411c7mD"]               — 第三方视频 ID，会拼接后台配置的 API 地址
+ *   [video vid="https://example.com/a.mp4"]  — 直接填完整 mp4 地址，留空 API 配置即可
+ *   [video vid="..." title="标题"]            — 可选标题
+ *
+ * @param string $content 文章内容
+ * @return string 解析后的内容
+ */
+function parseVideoShortcode($content)
+{
+    $pattern = '/\[video\s+vid=["\']([^"\']+)["\'](?:\s+title=["\']([^"\']*)["\'])?\]/';
+
+    $content = preg_replace_callback($pattern, function ($matches) {
+        $vid   = htmlspecialchars(trim($matches[1]), ENT_QUOTES, 'UTF-8');
+        $title = isset($matches[2]) && $matches[2] !== ''
+            ? htmlspecialchars($matches[2], ENT_QUOTES, 'UTF-8')
+            : '';
+
+        ob_start();
+        ?>
+        <div class="video-card" data-vid="<?php echo $vid; ?>">
+            <?php if ($title): ?>
+                <p class="video-card-title"><?php echo $title; ?></p>
+            <?php endif; ?>
+            <div class="video-player-container"></div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }, $content);
+
+    return $content;
+}
+
+/**
+ * 从内容中提取所有视频短代码，并返回移除短代码后的内容（供列表页摘要使用）
+ *
+ * @param string $content 原始内容
+ * @return array ['shortcodes' => string[], 'content' => string]
+ */
+function extractVideoShortcodes($content)
+{
+    $shortcodes = [];
+    $pattern    = '/\[video\s+vid=["\']([^"\']+)["\'](?:\s+title=["\']([^"\']*)["\'])?\]/';
+
+    preg_match_all($pattern, $content, $matches, PREG_SET_ORDER);
+    foreach ($matches as $match) {
+        $shortcodes[] = $match[0];
+    }
+
+    $contentWithoutVideo = preg_replace($pattern, '', $content);
+
+    return [
+        'shortcodes' => $shortcodes,
+        'content'    => $contentWithoutVideo,
+    ];
 }
 
 /**
@@ -1394,6 +1477,84 @@ Typecho_Plugin::factory('admin/write-post.php')->bottom = function () {
         if (e.key === 'Escape' && $('#music-modal').is(':visible')) {
             closeMusicModal();
         }
+    });
+    </script>
+
+    <!-- 视频短代码弹框 -->
+    <div id="video-modal" style="display:none;position:fixed;z-index:9999;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);">
+        <div id="video-modal-content" style="background:white;margin:10% auto;padding:20px;border-radius:8px;width:90%;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+            <h3 style="margin-top:0;margin-bottom:20px;color:#333;">🎬 插入视频卡片</h3>
+            <input type="text" id="video-vid"
+                   placeholder="视频 ID 或完整 mp4 地址（必填）"
+                   style="width:100%;margin-bottom:15px;padding:10px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;font-size:14px;" />
+            <input type="text" id="video-title"
+                   placeholder="视频标题（可选）"
+                   style="width:100%;margin-bottom:15px;padding:10px;border:1px solid #ddd;border-radius:4px;box-sizing:border-box;font-size:14px;" />
+            <p style="margin:0 0 15px;font-size:12px;color:#888;">
+                · 若在主题设置中填写了视频解析 API，vid 填视频 ID，系统会自动拼接 API 地址。<br>
+                · 若直接播放 mp4，vid 填完整 URL，无需配置 API。
+            </p>
+            <div style="text-align:right;margin-top:20px;">
+                <button onclick="closeVideoModal()" style="padding:10px 20px;margin-left:10px;border:none;border-radius:4px;cursor:pointer;background:#ddd;color:#333;font-size:14px;">取消</button>
+                <button onclick="insertVideoShortcode()" style="padding:10px 20px;margin-left:10px;border:none;border-radius:4px;cursor:pointer;background:#467b96;color:white;font-size:14px;">插入</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // 视频按钮注册（在已有的 $(document).ready 之外单独追加）
+    $(document).ready(function() {
+        var toolbar = $('.wmd-button-row');
+        if (toolbar.length > 0) {
+            var videoBtn = $('<li class="wmd-button wmd-music-button" title="插入视频卡片">🎬</li>');
+            videoBtn.on('click', openVideoModal);
+            toolbar.append(videoBtn);
+        }
+    });
+
+    function openVideoModal() {
+        $('#video-modal').fadeIn(200);
+        $('#video-vid').focus();
+    }
+
+    function closeVideoModal() {
+        $('#video-modal').fadeOut(200);
+        $('#video-vid, #video-title').val('');
+    }
+
+    function insertVideoShortcode() {
+        var vid   = $('#video-vid').val().trim();
+        var title = $('#video-title').val().trim();
+
+        if (!vid) {
+            alert('❌ 视频 ID 或地址为必填项！');
+            return;
+        }
+
+        var shortcode = '[video vid="' + vid + '"';
+        if (title) shortcode += ' title="' + title + '"';
+        shortcode += ']';
+
+        var textarea = $('#text');
+        if (textarea.length > 0) {
+            var cursorPos  = textarea[0].selectionStart;
+            var content    = textarea.val();
+            var newContent = content.substring(0, cursorPos) + '\n\n' + shortcode + '\n\n' + content.substring(cursorPos);
+            textarea.val(newContent);
+            var newPos = cursorPos + shortcode.length + 4;
+            textarea[0].setSelectionRange(newPos, newPos);
+            textarea.focus();
+        }
+
+        closeVideoModal();
+    }
+
+    $(document).on('click', '#video-modal', function(e) {
+        if (e.target.id === 'video-modal') closeVideoModal();
+    });
+
+    $(document).on('keydown', function(e) {
+        if (e.key === 'Escape' && $('#video-modal').is(':visible')) closeVideoModal();
     });
     </script>
     <?php

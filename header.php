@@ -46,7 +46,8 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
     <!-- 全局配置（适配伪静态和非伪静态） -->
     <script>
         window.ICEFOX_CONFIG = {
-            actionUrl: '<?php echo Typecho_Common::url('action/icefox', Helper::options()->index); ?>'
+            actionUrl: '<?php echo Typecho_Common::url('action/icefox', Helper::options()->index); ?>',
+            videoParseApi: '<?php echo htmlspecialchars(Helper::options()->videoParseApi ?? '', ENT_QUOTES, 'UTF-8'); ?>'
         };
     </script>
 
@@ -772,6 +773,75 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
     <?php if ($this->options->customJs): ?>
     <script>
         <?php $this->options->customJs(); ?>
+    </script>
+    <?php endif; ?>
+
+    <!-- 视频播放器自定义 JS（由主题设置注入，在页面加载后执行） -->
+    <?php if (!empty(Helper::options()->videoParseJs)): ?>
+    <script>
+    (function() {
+        // 初始化所有视频卡片
+        function initVideoCards() {
+            document.querySelectorAll('.video-card[data-vid]').forEach(function(card) {
+                if (card.dataset.videoInited) return;
+                card.dataset.videoInited = '1';
+
+                var vid       = card.dataset.vid;
+                var container = card.querySelector('.video-player-container');
+                if (!container) return;
+
+                var apiBase  = window.ICEFOX_CONFIG.videoParseApi || '';
+                var videoUrl = apiBase ? apiBase + encodeURIComponent(vid) : vid;
+
+                // 执行用户自定义播放器代码
+                (function(videoUrl, container, vid) {
+                    <?php echo Helper::options()->videoParseJs; ?>
+                })(videoUrl, container, vid);
+            });
+        }
+
+        // 页面加载完成后初始化，并监听动态加载（无限滚动）
+        document.addEventListener('DOMContentLoaded', initVideoCards);
+        // 供无限滚动加载新内容后调用
+        window.icefoxInitVideoCards = initVideoCards;
+    })();
+    </script>
+    <?php else: ?>
+    <script>
+    // 内置原生播放器初始化（未配置自定义 JS 时使用）
+    (function() {
+        function initVideoCards() {
+            document.querySelectorAll('.video-card[data-vid]').forEach(function(card) {
+                if (card.dataset.videoInited) return;
+                card.dataset.videoInited = '1';
+
+                var vid       = card.dataset.vid;
+                var container = card.querySelector('.video-player-container');
+                if (!container) return;
+
+                var apiBase  = window.ICEFOX_CONFIG.videoParseApi || '';
+                var videoUrl = apiBase ? apiBase + encodeURIComponent(vid) : vid;
+
+                var video = document.createElement('video');
+                video.controls = true;
+                video.controlsList = 'nodownload';
+                video.preload = 'metadata';
+                video.setAttribute('playsinline', '');
+                video.style.width = '100%';
+
+                var source = document.createElement('source');
+                source.src  = videoUrl;
+                source.type = 'video/mp4';
+
+                video.appendChild(source);
+                video.insertAdjacentHTML('beforeend', '<p>您的浏览器不支持视频播放。</p>');
+                container.appendChild(video);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initVideoCards);
+        window.icefoxInitVideoCards = initVideoCards;
+    })();
     </script>
     <?php endif; ?>
 

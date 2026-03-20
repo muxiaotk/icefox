@@ -45,6 +45,12 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
                         // 解析音乐短代码
                         $musicHtml = !empty($cws['music_shortcodes']) ? parseMusicShortcode($cws['music_shortcodes']) : '';
 
+                        // 提取视频短代码（在 filterContent 之前的原始内容中提取，不受 strip_tags 影响）
+                        $videoExtracted = extractVideoShortcodes($this->content);
+                        $videoHtml      = !empty($videoExtracted['shortcodes'])
+                            ? parseVideoShortcode(implode("\n", $videoExtracted['shortcodes']))
+                            : '';
+
                         if ($autoCollapse) {
                             // 自动收起模式：显示摘要，点击展开全文
                             if ($cws['is_truncated'] === true) {
@@ -55,27 +61,32 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
                                 // 无截断：直接显示完整内容
                                 echo '<div>' . $cws['full_content'] . '</div>';
                             }
-                            // 音乐卡片始终在最后面
+                            // 音乐卡片和视频卡片始终在最后面
                             echo $musicHtml;
+                            echo $videoHtml;
                         } else {
-                            // 不收起模式：直接显示完整内容 + 音乐卡片
+                            // 不收起模式：直接显示完整内容 + 音乐卡片 + 视频卡片
                             echo '<div class="full-content-display">' . $cws['full_content'] . '</div>';
                             echo $musicHtml;
+                            echo $videoHtml;
                         }
                         ?>
                     </div>
                     <?php
-                    // 检查是否有视频
-                    $videoSrc = extractVideoSrc($this->content);
-                    if ($videoSrc) {
-                        // 有视频则显示视频
-                        $this->videoUrl = $videoSrc;
-                        $this->need('components/post/post-video.php');
-                    } else {
-                        // 没有视频则显示图片
-                        $images = extractImageSrcs($this->content);
-                        $this->images = $images;
-                        $this->need('components/post/post-images.php');
+                    // 视频短代码已在上方单独渲染，此处只处理内嵌 <video> 标签（非短代码来源）
+                    // 若已有视频短代码，则跳过图片/视频的自动提取，避免重复展示
+                    if (empty($videoHtml)) {
+                        $videoSrc = extractVideoSrc($this->content);
+                        if ($videoSrc) {
+                            // 有内嵌视频则显示视频
+                            $this->videoUrl = $videoSrc;
+                            $this->need('components/post/post-video.php');
+                        } else {
+                            // 没有视频则显示图片
+                            $images = extractImageSrcs($this->content);
+                            $this->images = $images;
+                            $this->need('components/post/post-images.php');
+                        }
                     }
 
                     $this->need('components/post/post-position.php');
