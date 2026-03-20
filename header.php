@@ -776,74 +776,115 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
     </script>
     <?php endif; ?>
 
-    <!-- 视频播放器自定义 JS（由主题设置注入，在页面加载后执行） -->
-    <?php if (!empty(Helper::options()->videoParseJs)): ?>
+    <!-- 视频播放器初始化 -->
     <script>
     (function() {
-        // 初始化所有视频卡片
+        /**
+         * 创建原生 <video> 播放器并挂载到容器
+         */
+        function mountNativePlayer(container, src, poster) {
+            var video = document.createElement('video');
+            video.controls    = true;
+            video.controlsList = 'nodownload';
+            video.preload     = 'metadata';
+            video.setAttribute('playsinline', '');
+            video.style.width = '100%';
+            if (poster) video.poster = poster;
+
+            var source = document.createElement('source');
+            source.src  = src;
+            source.type = 'video/mp4';
+            video.appendChild(source);
+            container.appendChild(video);
+        }
+
+        /**
+         * 执行用户在后台「视频播放器自定义 JS」字段填写的代码
+         * 可用变量：videoUrl（播放地址）、container（容器 DOM）、vid（原始 ID）、poster（封面，可能为空）
+         */
+        function mountCustomPlayer(videoUrl, container, vid, poster) {
+            <?php
+            $customPlayerJs = Helper::options()->videoParseJs ?? '';
+            echo $customPlayerJs ? htmlspecialchars_decode($customPlayerJs) : '// 未配置自定义播放器，使用原生 video';
+            ?>
+        }
+
+        var hasCustomJs = <?php echo (!empty(Helper::options()->videoParseJs)) ? 'true' : 'false'; ?>;
+
+        /**
+         * 处理单个视频卡片：
+         *  - vid 以 .mp4 结尾  → 直接挂载播放器
+         *  - 配置了 API 地址   → 请求 API，拿到解析结果后挂载播放器
+         *  - 其他              → 将 vid 直接作为播放地址
+         */
+        async function initVideoCard(card) {
+            if (card.dataset.videoInited) return;
+            card.dataset.videoInited = '1';
+
+            var vid       = card.dataset.vid;
+            var container = card.querySelector('.video-player-container');
+            if (!container) return;
+
+            var apiBase = window.ICEFOX_CONFIG.videoParseApi || '';
+
+            // mp4 直链：无需 API，直接播放
+            var isMp4 = /\.mp4(\?.*)?$/i.test(vid);
+            if (isMp4 || !apiBase) {
+                if (hasCustomJs) {
+                    mountCustomPlayer(vid, container, vid, '');
+                } else {
+                    mountNativePlayer(container, vid, '');
+                }
+                return;
+            }
+
+            // 非 mp4 且有 API：请求解析接口
+            var apiUrl = apiBase + encodeURIComponent(vid);
+            try {
+                var response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('API 响应错误: ' + response.status);
+
+                var result = await response.json();
+
+                if (result.code === 200 && result.msg === '解析成功' && result.data && result.data.url) {
+                    var mp4Url  = result.data.url;
+                    var poster  = result.data.cover || '';
+                    if (hasCustomJs) {
+                        mountCustomPlayer(mp4Url, container, vid, poster);
+                    } else {
+                        mountNativePlayer(container, mp4Url, poster);
+                    }
+                } else {
+                    console.error('[icefox video] 解析失败:', result);
+                    // 降级：直接用原始 vid 尝试
+                    if (hasCustomJs) {
+                        mountCustomPlayer(vid, container, vid, '');
+                    } else {
+                        mountNativePlayer(container, vid, '');
+                    }
+                }
+            } catch (err) {
+                console.error('[icefox video] 请求出错:', err.message);
+                if (hasCustomJs) {
+                    mountCustomPlayer(vid, container, vid, '');
+                } else {
+                    mountNativePlayer(container, vid, '');
+                }
+            }
+        }
+
+        // 初始化页面上所有视频卡片
         function initVideoCards() {
             document.querySelectorAll('.video-card[data-vid]').forEach(function(card) {
-                if (card.dataset.videoInited) return;
-                card.dataset.videoInited = '1';
-
-                var vid       = card.dataset.vid;
-                var container = card.querySelector('.video-player-container');
-                if (!container) return;
-
-                var apiBase  = window.ICEFOX_CONFIG.videoParseApi || '';
-                var videoUrl = apiBase ? apiBase + encodeURIComponent(vid) : vid;
-
-                // 执行用户自定义播放器代码
-                (function(videoUrl, container, vid) {
-                    <?php echo Helper::options()->videoParseJs; ?>
-                })(videoUrl, container, vid);
+                initVideoCard(card);
             });
         }
 
-        // 页面加载完成后初始化，并监听动态加载（无限滚动）
         document.addEventListener('DOMContentLoaded', initVideoCards);
         // 供无限滚动加载新内容后调用
         window.icefoxInitVideoCards = initVideoCards;
     })();
     </script>
-    <?php else: ?>
-    <script>
-    // 内置原生播放器初始化（未配置自定义 JS 时使用）
-    (function() {
-        function initVideoCards() {
-            document.querySelectorAll('.video-card[data-vid]').forEach(function(card) {
-                if (card.dataset.videoInited) return;
-                card.dataset.videoInited = '1';
-
-                var vid       = card.dataset.vid;
-                var container = card.querySelector('.video-player-container');
-                if (!container) return;
-
-                var apiBase  = window.ICEFOX_CONFIG.videoParseApi || '';
-                var videoUrl = apiBase ? apiBase + encodeURIComponent(vid) : vid;
-
-                var video = document.createElement('video');
-                video.controls = true;
-                video.controlsList = 'nodownload';
-                video.preload = 'metadata';
-                video.setAttribute('playsinline', '');
-                video.style.width = '100%';
-
-                var source = document.createElement('source');
-                source.src  = videoUrl;
-                source.type = 'video/mp4';
-
-                video.appendChild(source);
-                video.insertAdjacentHTML('beforeend', '<p>您的浏览器不支持视频播放。</p>');
-                container.appendChild(video);
-            });
-        }
-
-        document.addEventListener('DOMContentLoaded', initVideoCards);
-        window.icefoxInitVideoCards = initVideoCards;
-    })();
-    </script>
-    <?php endif; ?>
 
     <!-- Typecho主题API -->
     <?php $this->header(); ?>
