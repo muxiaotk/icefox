@@ -54,6 +54,10 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
                         // 先过滤已渲染内容（保留摘要用的标签）
                         $filtered = filterContent($this->content);
 
+                        // 清除摘要中残留的短代码原文（Markdown 渲染后短代码被包在 <p> 里保留下来）
+                        $filtered = preg_replace('/\[video\s+vid=["\'][^"\']*["\'](?:\s+title=["\'][^"\']*["\'])?\]/', '', $filtered);
+                        $filtered = preg_replace('/\[music\s+[^\]]+\]/', '', $filtered);
+
                         // 生成摘要（使用已渲染的 HTML 内容做摘要显示，短代码已从原始文本单独提取）
                         $cws = generateContentWithSummary($filtered, 100);
 
