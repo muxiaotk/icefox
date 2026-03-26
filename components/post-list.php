@@ -10,7 +10,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
                 <div class="post-item-left">
                     <a href="<?php $this->author->permalink() ?>">
                         <img alt="<?php $this->author() ?>"
-                             src="<?php echo getGravatarUrl($this->author->mail, 64, 'identicon', 'g'); ?>">
+                             src="<?php echo getAuthorAvatarUrl($this->author->mail, 64); ?>">
                     </a>
                 </div>
                 <div class="post-item-right">

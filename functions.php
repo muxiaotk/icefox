@@ -106,6 +106,16 @@ function themeConfig($form)
         _t('在此填写调用视频播放器的 JavaScript 代码，用于初始化播放器或处理 API 返回结果。<br>可用变量：<code>videoUrl</code>（最终视频播放地址）、<code>container</code>（播放器容器 DOM 元素）、<code>vid</code>（原始视频 ID）。<br>示例（使用 DPlayer）：<pre>var dp = new DPlayer({ container: container, video: { url: videoUrl } });</pre><br>若留空，则使用主题内置的原生 &lt;video&gt; 标签播放。')
     );
     $form->addInput($videoParseJs);
+
+    // 自定义作者头像
+    $authorAvatar = new Typecho_Widget_Helper_Form_Element_Text(
+        'authorAvatar',
+        NULL,
+        NULL,
+        _t('自定义作者头像'),
+        _t('填入图片 URL，将替换所有文章列表和归档页中的作者头像。留空则使用 Gravatar 头像。')
+    );
+    $form->addInput($authorAvatar);
 }
 
 function themeFields($layout)
@@ -1113,6 +1123,23 @@ function getRawPostText($cid)
     $db  = Typecho_Db::get();
     $row = $db->fetchRow($db->select('text')->from('table.contents')->where('cid = ?', intval($cid)));
     return $row ? (string)$row['text'] : '';
+}
+
+/**
+ * 获取作者头像 URL
+ * 优先使用后台「自定义作者头像」配置，未配置则回退到 Gravatar
+ *
+ * @param string $email 作者邮箱
+ * @param int    $size  头像尺寸
+ * @return string 头像 URL
+ */
+function getAuthorAvatarUrl($email, $size = 64)
+{
+    $customAvatar = Helper::options()->authorAvatar ?? '';
+    if (!empty($customAvatar)) {
+        return $customAvatar;
+    }
+    return getGravatarUrl($email, $size, 'identicon', 'g');
 }
 
 /**

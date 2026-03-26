@@ -28,7 +28,7 @@ $this->need('header.php');
                             <div class="post-item-left">
                                 <a href="<?php $this->author->permalink() ?>">
                                     <img alt="<?php $this->author() ?>"
-                                         src="<?php echo getGravatarUrl($this->author->mail, 64, 'identicon', 'g'); ?>">
+                                         src="<?php echo getAuthorAvatarUrl($this->author->mail, 64); ?>">
                                 </a>
                             </div>
                             <div class="post-item-right">
@@ -41,46 +41,60 @@ $this->need('header.php');
                                     $options = \Widget\Options::alloc();
                                     $autoCollapse = $options->autoCollapse !== '0'; // 默认为 true（收起）
 
-                                    // 先过滤内容（保留摘要用的标签）
+                                    // 从数据库取原始 Markdown/文本（未经 Typecho 渲染），用于提取短代码
+                                    // $this->content 是已渲染的 HTML，Markdown 会破坏短代码中的 title 等参数
+                                    $rawText = getRawPostText($this->cid);
+
+                                    // 从原始文本中提取音乐短代码和视频短代码（不受 Markdown 渲染干扰）
+                                    $musicExtracted = extractMusicShortcodes($rawText);
+                                    $musicHtml      = !empty($musicExtracted['shortcodes'])
+                                        ? parseMusicShortcode(implode("\n", $musicExtracted['shortcodes']))
+                                        : '';
+
+                                    $videoExtracted = extractVideoShortcodes($rawText);
+                                    $videoHtml      = !empty($videoExtracted['shortcodes'])
+                                        ? parseVideoShortcode(implode("\n", $videoExtracted['shortcodes']))
+                                        : '';
+
+                                    // 先过滤已渲染内容（保留摘要用的标签）
                                     $filtered = filterContent($this->content);
 
-                                    // 生成摘要（音乐短代码不计入截断长度，会完整保留）
-                                    $cws = generateContentWithSummaryAndMusic($filtered, 100);
+                                    // 清除摘要中残留的短代码原文（Markdown 渲染后短代码被包在 <p> 里保留下来）
+                                    $filtered = preg_replace('/\[video\s+vid=["\'][^"\']*["\'](?:\s+title=["\'][^"\']*["\'])?\]/', '', $filtered);
+                                    $filtered = preg_replace('/\[music\s+[^\]]+\]/', '', $filtered);
 
-                                    // 解析音乐短代码
-                                    $musicHtml = !empty($cws['music_shortcodes']) ? parseMusicShortcode($cws['music_shortcodes']) : '';
+                                    // 生成摘要（使用已渲染的 HTML 内容做摘要显示，短代码已从原始文本单独提取）
+                                    $cws = generateContentWithSummary($filtered, 100);
 
                                     if ($autoCollapse) {
                                         // 自动收起模式：显示摘要，点击展开全文
                                         if ($cws['is_truncated'] === true) {
-                                            // 有截断：摘要 + 全文按钮 | [隐藏]完整内容 + 收起按钮 | 音乐卡片
                                             echo '<div class="summary-' . $this->cid . '">' . $cws['summary'] . '<span class="show_all_btn cursor-pointer" data-cid="' . $this->cid . '">全文</span></div>';
                                             echo '<div class="hidden full_content-' . $this->cid . '">' . $cws['full_content'] . '<div><span class="hide_all_btn cursor-pointer" data-cid="' . $this->cid . '">收起</span></div></div>';
                                         } else {
-                                            // 无截断：直接显示完整内容
                                             echo '<div>' . $cws['full_content'] . '</div>';
                                         }
-                                        // 音乐卡片始终在最后面
                                         echo $musicHtml;
+                                        echo $videoHtml;
                                     } else {
-                                        // 不收起模式：直接显示完整内容 + 音乐卡片
                                         echo '<div class="full-content-display">' . $cws['full_content'] . '</div>';
                                         echo $musicHtml;
+                                        echo $videoHtml;
                                     }
                                     ?>
                                 </div>
                                 <?php
-                                // 检查是否有视频
-                                $videoSrc = extractVideoSrc($this->content);
-                                if ($videoSrc) {
-                                    // 有视频则显示视频
-                                    $this->videoUrl = $videoSrc;
-                                    $this->need('components/post/post-video.php');
-                                } else {
-                                    // 没有视频则显示图片
-                                    $images = extractImageSrcs($this->content);
-                                    $this->images = $images;
-                                    $this->need('components/post/post-images.php');
+                                // 视频短代码已在上方单独渲染，此处只处理内嵌 <video> 标签（非短代码来源）
+                                if (empty($videoHtml)) {
+                                    $videoSrc = extractVideoSrc($this->content);
+                                    if ($videoSrc) {
+                                        $this->videoUrl = $videoSrc;
+                                        $this->need('components/post/post-video.php');
+                                    } else {
+                                        $images = extractImageSrcs($this->content);
+                                        $this->images = $images;
+                                        $this->need('components/post/post-images.php');
+                                    }
                                 }
 
                                 $this->need('components/post/post-position.php');
