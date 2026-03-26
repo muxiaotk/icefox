@@ -122,52 +122,54 @@ function initInfiniteScroll() {
         return;
     }
 
-    // 判断页面类型（首页还是归档页）
-    const isArchivePage = $('.archive-header').length > 0 || window.location.pathname.includes('/search/') || window.location.pathname.includes('/category/') || window.location.pathname.includes('/tag/') || window.location.pathname.includes('/author/');
-
-    // 判断是否为作者页面（特殊处理，格式为 /author/{uid}/{page}/）
-    const isAuthorPage = window.location.pathname.includes('/author/');
-
-    // 从URL中获取当前页码，如果没有找到则默认为1
-    let currentPage = 1;
-    const currentPath = window.location.pathname;
-
-    if (isAuthorPage) {
-        // 作者页面：格式为 /author/{uid}/ 或 /author/{uid}/{page}/
-        const authorPageMatch = currentPath.match(/\/author\/\d+\/(\d+)\/?$/);
-        if (authorPageMatch) {
-            currentPage = parseInt(authorPageMatch[1]);
-        }
-        // 如果没有匹配到第二个数字，说明是第一页
-    } else if (isArchivePage) {
-        // 其他归档页面：匹配 /数字/ 格式 (如 /search/keyword/2/)
-        const archivePageMatch = currentPath.match(/\/(\d+)\/?$/);
-        if (archivePageMatch) {
-            currentPage = parseInt(archivePageMatch[1]);
-        }
-    } else {
-        // 首页：匹配 /page/数字/ 格式
-        const homePageMatch = currentPath.match(/\/page\/(\d+)\/?$/);
-        if (homePageMatch) {
-            currentPage = parseInt(homePageMatch[1]);
-        }
-    }
-    
-    // 如果URL解析失败，尝试从数据属性获取
-    if (currentPage === 1) {
-        const dataPage = $currentPageEl.data('page');
-        if (dataPage) {
-            currentPage = parseInt(dataPage);
-        }
-    }
-
     const totalPages = parseInt($totalPagesEl.data('total'));
+    const currentPage = parseInt($currentPageEl.data('page') || 1);
 
     // 如果已经在最后一页，不需要初始化无限滚动
     if (currentPage >= totalPages) {
         return;
     }
 
+    // 从 Typecho 生成的分页导航中提取"页码 → URL"映射
+    // 这样可以直接使用 Typecho 生成的正确 URL（包含 index.php 等路径前缀）
+    const pageUrlMap = {};
+    $('.page-navigator a').each(function() {
+        const href = $(this).attr('href');
+        const text = $(this).text().trim();
+        const pageNum = parseInt(text);
+        if (!isNaN(pageNum) && href) {
+            pageUrlMap[pageNum] = href;
+        }
+    });
+
+    // 如果分页导航中没有更多页面的URL，则尝试从已有URL推断
+    // 取最后一个已知页面的URL，通过替换页码来构建其他页面的URL
+    let basePageUrl = null;
+    let basePageNum = 0;
+    Object.keys(pageUrlMap).forEach(function(k) {
+        const n = parseInt(k);
+        if (n > basePageNum) {
+            basePageNum = n;
+            basePageUrl = pageUrlMap[n];
+        }
+    });
+
+    // 构建指定页码的URL
+    function buildPageUrl(page) {
+        // 优先使用映射表中的已知URL
+        if (pageUrlMap[page]) {
+            return pageUrlMap[page];
+        }
+        // 回退：基于已知URL推断（替换末尾的页码数字）
+        if (basePageUrl && basePageNum > 0) {
+            return basePageUrl.replace('/' + basePageNum + '/', '/' + page + '/');
+        }
+        // 最后回退：基于当前URL手动拼接（加 index.php 前缀兜底）
+        const loc = window.location;
+        return loc.origin + '/index.php/page/' + page + '/';
+    }
+
+    let nextPage = currentPage;
     const postSelector = '.post-item';
 
     // 初始化ScrollLoad
@@ -193,76 +195,27 @@ function initInfiniteScroll() {
             </div>
         `,
         loadMore: function(sl) {
-            currentPage++;
+            nextPage++;
             // 检查是否超出总页数
-            if (currentPage > totalPages) {
+            if (nextPage > totalPages) {
                 sl.noMoreData();
                 return;
             }
-            loadNextPage(currentPage, sl, postSelector, isArchivePage, isAuthorPage, totalPages);
+            const url = buildPageUrl(nextPage);
+            loadNextPage(nextPage, url, sl, postSelector, totalPages, function(newUrls) {
+                // 将新页面中发现的页码URL合并到映射表
+                Object.assign(pageUrlMap, newUrls);
+            });
         }
     });
 }
 
 // 加载下一页内容
-function loadNextPage(page, scrollloadInstance, postSelector, isArchivePage, isAuthorPage, totalPages) {
+function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, totalPages, onNewPageUrls) {
     // 双重检查：确保不超出总页数
     if (page > totalPages) {
         scrollloadInstance.noMoreData();
         return;
-    }
-    // 构建下一页URL - 区分首页和归档页的分页格式
-    let nextPageUrl;
-    const currentPath = window.location.pathname;
-    const currentSearch = window.location.search;
-
-    if (isAuthorPage) {
-        // 作者页面：格式为 /author/{uid}/ 或 /author/{uid}/{page}/
-        // 需要保留 /author/{uid}/ 部分，只移除分页数字
-        let cleanPath = currentPath.replace(/\/author\/(\d+)\/\d+\/?$/, '/author/$1/');
-
-        // 如果没有匹配到分页数字（即当前是第一页），保持原路径
-        if (cleanPath === currentPath) {
-            cleanPath = currentPath.replace(/\/?$/, '/');
-        }
-
-        if (page === 1) {
-            nextPageUrl = cleanPath + currentSearch;
-        } else {
-            nextPageUrl = cleanPath + page + '/' + currentSearch;
-        }
-    } else if (isArchivePage) {
-        // 其他归档页面：移除现有的数字分页路径 (如 /2/, /3/)
-        let cleanPath = currentPath.replace(/\/\d+\/?$/, '');
-
-        // 确保路径以 / 结尾，除非是根路径
-        if (cleanPath !== '' && !cleanPath.endsWith('/')) {
-            cleanPath += '/';
-        }
-
-        if (page === 1) {
-            // 第一页不需要分页路径
-            nextPageUrl = cleanPath + currentSearch;
-        } else {
-            // 归档页分页格式：直接添加数字，如 /search/keyword/2/
-            nextPageUrl = cleanPath + page + '/' + currentSearch;
-        }
-    } else {
-        // 首页：移除现有的 /page/数字 分页路径
-        let cleanPath = currentPath.replace(/\/page\/\d+\/?$/, '');
-        
-        // 确保路径以 / 结尾，除非是根路径
-        if (cleanPath !== '' && !cleanPath.endsWith('/')) {
-            cleanPath += '/';
-        }
-
-        if (page === 1) {
-            // 第一页不需要分页路径
-            nextPageUrl = cleanPath + currentSearch;
-        } else {
-            // 首页分页格式：/page/2/
-            nextPageUrl = cleanPath + 'page/' + page + '/' + currentSearch;
-        }
     }
 
     $.ajax({
@@ -311,6 +264,16 @@ function loadNextPage(page, scrollloadInstance, postSelector, isArchivePage, isA
                             }
                         });
                     }
+
+                    // 初始化新加载的视频卡片
+                    const $videoCards = $newItem.find('.video-card[data-vid]');
+                    if ($videoCards.length && window.icefoxInitVideoCards) {
+                        $videoCards.each(function() {
+                            if (!this.dataset.videoInitialized) {
+                                window.icefoxInitVideoCard && window.icefoxInitVideoCard(this);
+                            }
+                        });
+                    }
                 });
 
                 // 重新初始化Fancybox
@@ -331,6 +294,20 @@ function loadNextPage(page, scrollloadInstance, postSelector, isArchivePage, isA
                         ArrowRight: "next", ArrowLeft: "prev",
                     },
                 });
+
+                // 从新页面的分页导航中提取更多页码URL，更新映射表
+                if (typeof onNewPageUrls === 'function') {
+                    const newPageUrls = {};
+                    $response.find('.page-navigator a').each(function() {
+                        const href = $(this).attr('href');
+                        const text = $(this).text().trim();
+                        const pageNum = parseInt(text);
+                        if (!isNaN(pageNum) && href) {
+                            newPageUrls[pageNum] = href;
+                        }
+                    });
+                    onNewPageUrls(newPageUrls);
+                }
 
                 // 检查是否还有下一页
                 const $newPagination = $response.find('.total-pages');

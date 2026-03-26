@@ -885,6 +885,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
         document.addEventListener('DOMContentLoaded', initVideoCards);
         // 供无限滚动加载新内容后调用
         window.icefoxInitVideoCards = initVideoCards;
+        window.icefoxInitVideoCard  = initVideoCard;
     })();
     </script>
 
