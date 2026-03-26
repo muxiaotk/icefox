@@ -24,7 +24,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
     <!-- 主题样式 -->
     <link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/bulma.min.css'); ?>">
     <link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/fancybox.css'); ?>">
-    <link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/icefox.css'); ?>">
+    <link rel="stylesheet" href="<?php $this->options->themeUrl('assets/css/icefox.css'); ?>?v=<?php echo filemtime(dirname(__FILE__) . '/assets/css/icefox.css'); ?>">
 
     <!-- AlpineJS x-cloak 样式 -->
     <style>
@@ -767,7 +767,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
     <script src="<?php $this->options->themeUrl('/assets/js/fancybox.umd.js'); ?>"></script>
     <script src="<?php $this->options->themeUrl('/assets/js/scrollload.min.js'); ?>"></script>
     <script src="<?php $this->options->themeUrl('/assets/js/music-player.js'); ?>"></script>
-    <script src="<?php $this->options->themeUrl('/assets/js/icefox.js'); ?>"></script>
+    <script src="<?php $this->options->themeUrl('/assets/js/icefox.js'); ?>?v=<?php echo filemtime(dirname(__FILE__) . '/assets/js/icefox.js'); ?>"></script>
 
     <!-- 自定义JavaScript -->
     <?php if ($this->options->customJs): ?>
