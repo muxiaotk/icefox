@@ -199,8 +199,17 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
 <!-- 分页信息（隐藏） -->
 <div class="pagination" style="display: none;">
     <?php
-    $currentPage = $this->_currentPage;
-    $totalPages = $this->_totalPages;
+    // _currentPage / _totalPages 在部分页面类型下可能为空，改为手动计算兜底
+    $currentPage = !empty($this->_currentPage) ? (int)$this->_currentPage : 1;
+
+    if (!empty($this->_totalPages)) {
+        $totalPages = (int)$this->_totalPages;
+    } else {
+        // 手动计算：总文章数 / 每页条数，向上取整
+        $pageSize   = !empty($this->parameter->pageSize) ? (int)$this->parameter->pageSize : 10;
+        $total      = $this->getTotal();
+        $totalPages = $total > 0 ? (int)ceil($total / $pageSize) : 1;
+    }
     ?>
     <span class="current-page" data-page="<?php echo $currentPage; ?>"></span>
     <span class="total-pages" data-total="<?php echo $totalPages; ?>"></span>
