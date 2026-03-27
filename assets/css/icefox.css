@@ -1628,6 +1628,24 @@ main {
     opacity: 0;
 }
 
+/* 解决微信环境下由于容器高度计算问题导致的加载失败提示 */
+.scrollload-container.sl-exception .scrollload-error {
+    display: flex !important;
+}
+
+.scrollload-container.sl-loading .scrollload-loading {
+    display: flex !important;
+}
+
+.scrollload-container.sl-no-more .scrollload-nomore {
+    display: flex !important;
+}
+
+/* 强制显示加载动画，防止被错误隐藏 */
+.scrollload-loading {
+    min-height: 60px;
+}
+
 .scrollload-content::after,
 .archive-container::after {
     content: '';

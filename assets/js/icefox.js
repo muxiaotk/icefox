@@ -156,17 +156,32 @@ function initInfiniteScroll() {
 
     // 构建指定页码的URL
     function buildPageUrl(page) {
+        // 确保使用当前页面的协议，防止微信等环境下的 HTTPS 强制跳转问题
+        const protocol = window.location.protocol;
+        // 兼容不支持 window.location.origin 的情况
+        const origin = window.location.origin || (protocol + '//' + window.location.host);
+        
         // 优先使用映射表中的已知URL
         if (pageUrlMap[page]) {
-            return pageUrlMap[page];
+            let url = pageUrlMap[page];
+            if (url.startsWith('//')) url = protocol + url;
+            return url;
         }
-        // 回退：基于已知URL推断（替换末尾的页码数字）
+        // 回退：基于已知URL推断（替换页码数字）
         if (basePageUrl && basePageNum > 0) {
-            return basePageUrl.replace('/' + basePageNum + '/', '/' + page + '/');
+            // 尝试更灵活的替换：匹配 /page/N 或 ?page=N 或 &page=N 或 /N/
+            let url = basePageUrl.replace(new RegExp('([/&?]page[/=]|/)' + basePageNum + '(/|&|$)'), '$1' + page + '$2');
+            if (url.startsWith('//')) url = protocol + url;
+            return url;
         }
-        // 最后回退：基于当前URL手动拼接（加 index.php 前缀兜底）
+        // 最后回退：基于当前URL手动拼接
         const loc = window.location;
-        return loc.origin + '/index.php/page/' + page + '/';
+        const baseUrl = origin + loc.pathname;
+        // 简单处理：如果路径中包含 /page/N，则替换它；否则拼接到末尾
+        if (/\/page\/\d+/i.test(baseUrl)) {
+            return baseUrl.replace(/\/page\/\d+/i, '/page/' + page);
+        }
+        return baseUrl.replace(/\/+$/, '') + '/page/' + page + '/';
     }
 
     let nextPage = currentPage;
@@ -176,7 +191,7 @@ function initInfiniteScroll() {
     const scrollload = new Scrollload({
         container: document.querySelector('.scrollload-container'),
         content: document.querySelector('.scrollload-content'),
-        threshold: 100, // 提前100px开始加载
+        threshold: 200, // 增加阈值，提前开始加载，防止滚动到底部时触发逻辑问题
         loadingHtml: `
             <div class="scrollload-loading">
                 <div class="loading-spinner"></div>
@@ -222,14 +237,27 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
         url: nextPageUrl,
         type: 'GET',
         dataType: 'html',
+        // 增加缓存控制，防止微信等浏览器缓存错误的请求结果
+        cache: false,
+        // 增加超时控制
+        timeout: 10000,
+        // 微信环境有时需要显式指定请求头
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
         success: function(response) {
             try {
-                // 解析返回的HTML
-                const $response = $(response);
-                const $newPosts = $response.find('.scrollload-content ' + postSelector);
+                // 使用更健壮的方式解析返回的HTML
+                // 创建一个临时的 div 来包裹内容，确保 find() 能在整个文档片段中搜索
+                const $response = $('<div/>').append($.parseHTML(response));
+                let $newPosts = $response.find('.scrollload-content ' + postSelector);
 
                 if ($newPosts.length === 0) {
-                    // 没有更多内容
+                    // 尝试另一种选择器（以防结构略有不同）
+                    $newPosts = $response.find(postSelector);
+                }
+
+                if ($newPosts.length === 0) {
                     scrollloadInstance.noMoreData();
                     return;
                 }
@@ -239,9 +267,13 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
                 $newPosts.each(function() {
                     // 重新绑定Alpine.js数据
                     const $newItem = $(this).appendTo($content);
-                    // 触发Alpine.js初始化
-                    if (window.Alpine) {
-                        window.Alpine.initTree($newItem[0]);
+                    // 触发Alpine.js初始化，增加安全检查
+                    if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+                        try {
+                            window.Alpine.initTree($newItem[0]);
+                        } catch (e) {
+                            console.warn('Alpine.js 初始化失败:', e);
+                        }
                     }
 
                     // 初始化新文章的点赞数据
@@ -259,8 +291,12 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
                         $musicPlayers.each(function() {
                             // 检查是否已经初始化过
                             if (!this.dataset.musicPlayerInitialized) {
-                                const player = new MusicPlayer(this);
-                                window.IcefoxMusicManager.register(player);
+                                try {
+                                    const player = new MusicPlayer(this);
+                                    window.IcefoxMusicManager.register(player);
+                                } catch (e) {
+                                    console.warn('MusicPlayer 初始化失败:', e);
+                                }
                             }
                         });
                     }
@@ -270,30 +306,36 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
                     if ($videoCards.length && window.icefoxInitVideoCards) {
                         $videoCards.each(function() {
                             if (!this.dataset.videoInitialized) {
-                                window.icefoxInitVideoCard && window.icefoxInitVideoCard(this);
+                                try {
+                                    window.icefoxInitVideoCard && window.icefoxInitVideoCard(this);
+                                } catch (e) {
+                                    console.warn('视频卡片初始化失败:', e);
+                                }
                             }
                         });
                     }
                 });
 
-                // 重新初始化Fancybox
-                Fancybox.bind("[data-fancybox]", {
-                    Thumbs: { autoStart: false },
-                    Toolbar: {
-                        display: {
-                            left: ["infobar"],
-                            middle: ["zoomIn", "zoomOut", "toggle1to1", "rotateCCW", "rotateCW", "flipX", "flipY"],
-                            right: ["slideshow", "thumbs", "close"],
+                // 重新初始化Fancybox，增加安全检查
+                if (window.Fancybox && typeof window.Fancybox.bind === 'function') {
+                    window.Fancybox.bind("[data-fancybox]", {
+                        Thumbs: { autoStart: false },
+                        Toolbar: {
+                            display: {
+                                left: ["infobar"],
+                                middle: ["zoomIn", "zoomOut", "toggle1to1", "rotateCCW", "rotateCW", "flipX", "flipY"],
+                                right: ["slideshow", "thumbs", "close"],
+                            },
                         },
-                    },
-                    loop: true,
-                    keyboard: {
-                        Escape: "close", Delete: "close", Backspace: "close",
-                        PageUp: "next", PageDown: "prev",
-                        ArrowUp: "next", ArrowDown: "prev",
-                        ArrowRight: "next", ArrowLeft: "prev",
-                    },
-                });
+                        loop: true,
+                        keyboard: {
+                            Escape: "close", Delete: "close", Backspace: "close",
+                            PageUp: "next", PageDown: "prev",
+                            ArrowUp: "next", ArrowDown: "prev",
+                            ArrowRight: "next", ArrowLeft: "prev",
+                        },
+                    });
+                }
 
                 // 从新页面的分页导航中提取更多页码URL，更新映射表
                 if (typeof onNewPageUrls === 'function') {
@@ -319,14 +361,18 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
                     }
                 }
 
-                // 继续允许加载
-                scrollloadInstance.unLock();
+                // 给DOM渲染留一点点缓冲时间，然后再解锁加载
+                setTimeout(() => {
+                    scrollloadInstance.unLock();
+                }, 50);
 
             } catch (error) {
+                console.error('解析下一页内容失败:', error);
                 scrollloadInstance.throwException();
             }
         },
         error: function(xhr, status, error) {
+            console.error('加载下一页请求失败:', status, error);
             // 如果是404错误，说明页面不存在，直接显示没有更多数据
             if (xhr.status === 404) {
                 scrollloadInstance.noMoreData();
