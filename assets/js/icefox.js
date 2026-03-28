@@ -154,34 +154,57 @@ function initInfiniteScroll() {
         }
     });
 
+    // 规范化分页 URL，解决协议/域名不一致导致的微信请求失败
+    function normalizePageUrl(rawUrl) {
+        if (!rawUrl) return rawUrl;
+
+        const protocol = window.location.protocol;
+        const currentHost = window.location.host;
+        const currentOrigin = window.location.origin || (protocol + '//' + currentHost);
+
+        // 兼容 HTML 中的 &amp;
+        let safeUrl = String(rawUrl).replace(/&amp;/g, '&').trim();
+
+        try {
+            // 用当前 origin 解析相对路径
+            const parsed = new URL(safeUrl, currentOrigin);
+            // 强制同协议、同 host，避免 mixed content / CORS
+            parsed.protocol = protocol;
+            parsed.host = currentHost;
+            return parsed.toString();
+        } catch (e) {
+            // URL 解析失败时，尽量返回原值
+            return safeUrl;
+        }
+    }
+
     // 构建指定页码的URL
     function buildPageUrl(page) {
-        // 确保使用当前页面的协议，防止微信等环境下的 HTTPS 强制跳转问题
-        const protocol = window.location.protocol;
         // 兼容不支持 window.location.origin 的情况
+        const protocol = window.location.protocol;
         const origin = window.location.origin || (protocol + '//' + window.location.host);
-        
+
         // 优先使用映射表中的已知URL
         if (pageUrlMap[page]) {
-            let url = pageUrlMap[page];
-            if (url.startsWith('//')) url = protocol + url;
-            return url;
+            return normalizePageUrl(pageUrlMap[page]);
         }
         // 回退：基于已知URL推断（替换页码数字）
         if (basePageUrl && basePageNum > 0) {
             // 尝试更灵活的替换：匹配 /page/N 或 ?page=N 或 &page=N 或 /N/
             let url = basePageUrl.replace(new RegExp('([/&?]page[/=]|/)' + basePageNum + '(/|&|$)'), '$1' + page + '$2');
-            if (url.startsWith('//')) url = protocol + url;
-            return url;
+            return normalizePageUrl(url);
         }
         // 最后回退：基于当前URL手动拼接
         const loc = window.location;
         const baseUrl = origin + loc.pathname;
+        let fallbackUrl = '';
         // 简单处理：如果路径中包含 /page/N，则替换它；否则拼接到末尾
         if (/\/page\/\d+/i.test(baseUrl)) {
-            return baseUrl.replace(/\/page\/\d+/i, '/page/' + page);
+            fallbackUrl = baseUrl.replace(/\/page\/\d+/i, '/page/' + page);
+        } else {
+            fallbackUrl = baseUrl.replace(/\/+$/, '') + '/page/' + page + '/';
         }
-        return baseUrl.replace(/\/+$/, '') + '/page/' + page + '/';
+        return normalizePageUrl(fallbackUrl);
     }
 
     let nextPage = currentPage;
@@ -233,8 +256,10 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
         return;
     }
 
+    const requestUrl = nextPageUrl + (nextPageUrl.indexOf('?') > -1 ? '&' : '?') + '_scrollload=' + Date.now();
+
     $.ajax({
-        url: nextPageUrl,
+        url: requestUrl,
         type: 'GET',
         dataType: 'html',
         // 增加缓存控制，防止微信等浏览器缓存错误的请求结果
@@ -372,13 +397,23 @@ function loadNextPage(page, nextPageUrl, scrollloadInstance, postSelector, total
             }
         },
         error: function(xhr, status, error) {
-            console.error('加载下一页请求失败:', status, error);
-            // 如果是404错误，说明页面不存在，直接显示没有更多数据
-            if (xhr.status === 404) {
+            console.error('加载下一页请求失败:', status, error, 'url:', requestUrl, 'statusCode:', xhr && xhr.status);
+
+            // 404 表示没有更多分页
+            if (xhr && xhr.status === 404) {
                 scrollloadInstance.noMoreData();
-            } else {
-                scrollloadInstance.throwException();
+                return;
             }
+
+            // 微信环境 + 状态码 0 常见于协议/域名策略拦截，回退到整页跳转
+            const ua = navigator.userAgent || '';
+            const isWeChat = /MicroMessenger/i.test(ua);
+            if (isWeChat && xhr && xhr.status === 0) {
+                window.location.href = nextPageUrl;
+                return;
+            }
+
+            scrollloadInstance.throwException();
         }
     });
 }
